@@ -137,9 +137,12 @@ async function seed() {
     { name: 'Books', slug: 'books' },
     { name: 'Home & Garden', slug: 'home-garden' },
     { name: 'Sports', slug: 'sports' },
+    { name: 'Beauty', slug: 'beauty' },
+    { name: 'Toys & Games', slug: 'toys-games' },
   ]);
 
-  const [electronics, clothing, books, homeGarden, sports] = categories;
+  const [electronics, clothing, books, homeGarden, sports, beauty, toys] =
+    categories;
   console.log(`Created ${categories.length} categories.`);
 
   // -------------------------------------------------------------------------
@@ -309,6 +312,157 @@ async function seed() {
       price: 1999,
       imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=500',
       category: sports._id,
+      stockQuantity: 140,
+    },
+    // More Electronics
+    {
+      name: 'Wireless Charging Pad',
+      description: 'Slim 15W Qi wireless charger with anti-slip surface and over-temperature protection. Charges through most cases.',
+      price: 2999,
+      imageUrl: 'https://images.unsplash.com/photo-1591290619762-c588edddc7ee?w=500',
+      category: electronics._id,
+      stockQuantity: 75,
+    },
+    {
+      name: 'Smartwatch Series X',
+      description: 'Fitness-focused smartwatch with heart-rate, SpO2, GPS, and a 7-day battery. Always-on AMOLED display.',
+      price: 24999,
+      imageUrl: 'https://images.unsplash.com/photo-1546868871-7041f2a55e12?w=500',
+      category: electronics._id,
+      stockQuantity: 38,
+    },
+    {
+      name: 'USB-C Hub 7-in-1',
+      description: 'Expand one USB-C port into HDMI 4K, 3× USB-A, SD/microSD, and 100W passthrough charging.',
+      price: 4599,
+      imageUrl: 'https://images.unsplash.com/photo-1625842268584-8f3296236761?w=500',
+      category: electronics._id,
+      stockQuantity: 64,
+    },
+    // More Clothing
+    {
+      name: 'Canvas Low-Top Sneakers',
+      description: 'Everyday canvas sneakers with a cushioned footbed and durable vulcanised rubber sole.',
+      price: 5499,
+      imageUrl: 'https://images.unsplash.com/photo-1525966222134-fcfa99b8ae77?w=500',
+      category: clothing._id,
+      stockQuantity: 90,
+    },
+    {
+      name: 'Leather Weekender Bag',
+      description: 'Full-grain leather duffel with a padded laptop sleeve and detachable shoulder strap. Carry-on friendly.',
+      price: 13999,
+      imageUrl: 'https://images.unsplash.com/photo-1547949003-9792a18a2601?w=500',
+      category: clothing._id,
+      stockQuantity: 25,
+    },
+    {
+      name: 'Classic Aviator Sunglasses',
+      description: 'Polarised aviators with UV400 protection and a lightweight metal frame. Includes a hard case.',
+      price: 3499,
+      imageUrl: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=500',
+      category: clothing._id,
+      stockQuantity: 110,
+    },
+    // More Books
+    {
+      name: 'Pragmatic Thinking & Learning',
+      description: 'Refactor your wetware — practical techniques to learn faster and think more effectively as a developer.',
+      price: 2799,
+      imageUrl: 'https://images.unsplash.com/photo-1532012197267-da84d127e765?w=500',
+      category: books._id,
+      stockQuantity: 95,
+    },
+    {
+      name: 'The Pragmatic Programmer',
+      description: 'Your journey to mastery. Timeless tips on craftsmanship, automation, and pragmatic software design.',
+      price: 3999,
+      imageUrl: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?w=500',
+      category: books._id,
+      stockQuantity: 130,
+    },
+    // More Home & Garden
+    {
+      name: 'Ceramic Pour-Over Coffee Set',
+      description: 'Hand-glazed ceramic dripper with a matching 600ml carafe. Brews a clean, balanced cup.',
+      price: 4299,
+      imageUrl: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=500',
+      category: homeGarden._id,
+      stockQuantity: 60,
+    },
+    {
+      name: 'Linen Throw Blanket',
+      description: 'Stonewashed 100% linen throw — breathable, soft, and gets better with every wash. 130×170cm.',
+      price: 5999,
+      imageUrl: 'https://images.unsplash.com/photo-1584100936595-c0654b55a2e6?w=500',
+      category: homeGarden._id,
+      stockQuantity: 48,
+    },
+    // More Sports
+    {
+      name: 'Adjustable Dumbbell 24kg',
+      description: 'Space-saving adjustable dumbbell — dial from 2.5kg to 24kg in seconds. Sold individually.',
+      price: 17999,
+      imageUrl: 'https://images.unsplash.com/photo-1638536532686-d610adfc8e5c?w=500',
+      category: sports._id,
+      stockQuantity: 30,
+    },
+    {
+      name: 'Insulated Sports Backpack',
+      description: '28L weatherproof backpack with an insulated cooler pocket, laptop sleeve, and ventilated back panel.',
+      price: 6999,
+      imageUrl: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=500',
+      category: sports._id,
+      stockQuantity: 52,
+    },
+    // Beauty
+    {
+      name: 'Vitamin C Brightening Serum',
+      description: '15% vitamin C with hyaluronic acid and vitamin E. Brightens, hydrates, and evens skin tone. 30ml.',
+      price: 2899,
+      imageUrl: 'https://images.unsplash.com/photo-1620916566398-39f1143ab7be?w=500',
+      category: beauty._id,
+      stockQuantity: 120,
+    },
+    {
+      name: 'Bamboo Charcoal Face Mask Set',
+      description: 'Set of 5 detoxifying sheet masks that purify pores and leave skin refreshed and soft.',
+      price: 1599,
+      imageUrl: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=500',
+      category: beauty._id,
+      stockQuantity: 160,
+    },
+    {
+      name: 'Natural Bristle Hair Brush',
+      description: 'Boar-bristle paddle brush that distributes natural oils for smoother, shinier, healthier hair.',
+      price: 2199,
+      imageUrl: 'https://images.unsplash.com/photo-1522338242992-e1a54906a8da?w=500',
+      category: beauty._id,
+      stockQuantity: 85,
+    },
+    // Toys & Games
+    {
+      name: 'Wooden Building Blocks (100 pc)',
+      description: 'Smooth, non-toxic hardwood blocks in vivid colours. Endless open-ended play for ages 3+.',
+      price: 3299,
+      imageUrl: 'https://images.unsplash.com/photo-1558877385-09c4d5ca64f6?w=500',
+      category: toys._id,
+      stockQuantity: 100,
+    },
+    {
+      name: 'Strategy Board Game',
+      description: 'Award-winning tile-laying strategy game for 2–5 players. 30–45 minutes per game.',
+      price: 4499,
+      imageUrl: 'https://images.unsplash.com/photo-1606503153255-59d8b8b82176?w=500',
+      category: toys._id,
+      stockQuantity: 70,
+    },
+    {
+      name: '1000-Piece Jigsaw Puzzle',
+      description: 'Premium linen-finish 1000-piece puzzle with a stunning landscape. Random-cut, no two pieces alike.',
+      price: 1899,
+      imageUrl: 'https://images.unsplash.com/photo-1606092195730-5d7b9af1efc5?w=500',
+      category: toys._id,
       stockQuantity: 140,
     },
   ]);

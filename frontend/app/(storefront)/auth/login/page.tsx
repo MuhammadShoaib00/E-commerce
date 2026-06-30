@@ -1,36 +1,120 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Package } from 'lucide-react';
+import { Package, ShieldCheck, Truck, Sparkles } from 'lucide-react';
 import { useAuth } from '@/lib/auth/AuthProvider';
 import { Button } from '@/components/ui/Button';
 import { FormField } from '@/components/ui/FormField';
 import { useToast } from '@/components/ui/Toast';
 
-const schema = z.object({
-  email: z.string().email('Enter a valid email'),
-  password: z.string().min(1, 'Password is required'),
-});
+type Mode = 'login' | 'signup';
 
-type FormValues = z.infer<typeof schema>;
-
-export default function LoginPage() {
+export default function AuthPage() {
   return (
     <Suspense fallback={null}>
-      <LoginContent />
+      <AuthContent />
     </Suspense>
   );
 }
 
-function LoginContent() {
-  const { login } = useAuth();
-  const router = useRouter();
+function AuthContent() {
   const searchParams = useSearchParams();
+  const [mode, setMode] = useState<Mode>(searchParams.get('mode') === 'signup' ? 'signup' : 'login');
+  const redirect = searchParams.get('redirect') ?? '/';
+
+  return (
+    <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center px-4 py-12">
+      <div className="grid w-full max-w-4xl overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.12)] md:grid-cols-2">
+        {/* Brand panel */}
+        <aside className="relative hidden flex-col justify-between bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 p-10 text-white md:flex">
+          <div className="flex items-center gap-2 text-2xl font-black uppercase tracking-tight">
+            <Package className="h-7 w-7" />
+            Shop<span className="text-primary-200">Flow</span>
+          </div>
+          <div className="space-y-6">
+            <h2 className="text-3xl font-extrabold leading-tight">
+              {mode === 'login' ? 'Welcome back.' : 'Join ShopFlow.'}
+            </h2>
+            <p className="text-sm text-primary-100">
+              Your cart, orders, and personalised picks — all in one place.
+            </p>
+            <ul className="space-y-3 text-sm">
+              <Feature icon={<Truck className="h-4 w-4" />} text="Fast delivery on every order" />
+              <Feature icon={<ShieldCheck className="h-4 w-4" />} text="Secure checkout & saved orders" />
+              <Feature icon={<Sparkles className="h-4 w-4" />} text="Recommendations picked for you" />
+            </ul>
+          </div>
+          <p className="text-xs text-primary-200/80">© ShopFlow — a demo storefront.</p>
+        </aside>
+
+        {/* Form panel */}
+        <div className="p-8 sm:p-10">
+          {/* Segmented toggle */}
+          <div className="mb-8 flex rounded-full bg-neutral-100 p-1 text-sm font-bold">
+            <button
+              onClick={() => setMode('login')}
+              className={`flex-1 rounded-full py-2 transition ${mode === 'login' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'}`}
+            >
+              Sign in
+            </button>
+            <button
+              onClick={() => setMode('signup')}
+              className={`flex-1 rounded-full py-2 transition ${mode === 'signup' ? 'bg-white text-neutral-900 shadow-sm' : 'text-neutral-500'}`}
+            >
+              Create account
+            </button>
+          </div>
+
+          {/* Re-mount the form on mode change so the right schema/fields apply */}
+          <AuthForm key={mode} mode={mode} redirect={redirect} />
+
+          {mode === 'login' && (
+            <div className="mt-6 space-y-1 rounded-xl bg-neutral-50 p-4 text-xs text-neutral-500">
+              <p className="mb-2 font-semibold text-neutral-700">Seeded test accounts</p>
+              <p>Admin: admin@shop.com / Admin@123</p>
+              <p>Customer: customer@shop.com / Customer@123</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Feature({ icon, text }: { icon: React.ReactNode; text: string }) {
+  return (
+    <li className="flex items-center gap-3">
+      <span className="grid h-7 w-7 place-items-center rounded-full bg-white/15">{icon}</span>
+      {text}
+    </li>
+  );
+}
+
+const loginSchema = z.object({
+  email: z.string().email('Enter a valid email'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+const signupSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email('Enter a valid email'),
+  password: z
+    .string()
+    .min(8, 'Password must be at least 8 characters')
+    .regex(/[A-Z]/, 'Must contain an uppercase letter')
+    .regex(/[0-9]/, 'Must contain a number'),
+});
+
+type LoginValues = z.infer<typeof loginSchema>;
+type SignupValues = z.infer<typeof signupSchema>;
+
+function AuthForm({ mode, redirect }: { mode: Mode; redirect: string }) {
+  const { login, signup } = useAuth();
+  const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -38,73 +122,68 @@ function LoginContent() {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+  } = useForm<SignupValues>({
+    resolver: zodResolver(mode === 'signup' ? signupSchema : (loginSchema as unknown as typeof signupSchema)),
+  });
 
-  const onSubmit = async (values: FormValues) => {
+  const onSubmit = handleSubmit(async (values) => {
     setIsLoading(true);
     try {
-      await login(values.email, values.password);
-      const redirect = searchParams.get('redirect') ?? '/';
+      if (mode === 'signup') {
+        await signup(values.email, values.name, values.password);
+      } else {
+        await login(values.email, (values as unknown as LoginValues).password);
+      }
       router.push(redirect);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'Login failed';
-      toast(msg, 'error');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Authentication failed', 'error');
     } finally {
       setIsLoading(false);
     }
-  };
+  });
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-primary-100 mb-4">
-            <Package className="w-6 h-6 text-primary-600" />
-          </div>
-          <h1 className="text-2xl font-bold text-neutral-900">Welcome back</h1>
-          <p className="text-neutral-500 text-sm mt-1">Sign in to your ShopFlow account</p>
-        </div>
-
-        <form
-          onSubmit={handleSubmit(onSubmit)}
-          className="bg-white rounded-2xl border border-neutral-200 p-6 flex flex-col gap-4"
-        >
-          <FormField
-            label="Email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            error={errors.email?.message}
-            {...register('email')}
-          />
-
-          <FormField
-            label="Password"
-            type="password"
-            autoComplete="current-password"
-            placeholder="••••••••"
-            error={errors.password?.message}
-            {...register('password')}
-          />
-
-          <Button type="submit" isLoading={isLoading} className="w-full mt-1">
-            Sign in
-          </Button>
-        </form>
-
-        <p className="text-center text-sm text-neutral-500 mt-4">
-          Don&apos;t have an account?{' '}
-          <Link href="/auth/signup" className="text-primary-600 font-medium hover:underline">
-            Sign up
-          </Link>
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      <div>
+        <h1 className="text-2xl font-bold text-neutral-900">
+          {mode === 'login' ? 'Sign in' : 'Create your account'}
+        </h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          {mode === 'login' ? 'Welcome back to ShopFlow.' : 'It only takes a moment.'}
         </p>
-
-        <div className="mt-6 p-4 bg-neutral-50 rounded-xl text-xs text-neutral-500 space-y-1">
-          <p className="font-semibold text-neutral-700 mb-2">Seeded test accounts:</p>
-          <p>Admin: admin@shop.com / Admin@123</p>
-          <p>Customer: customer@shop.com / Customer@123</p>
-        </div>
       </div>
-    </div>
+
+      {mode === 'signup' && (
+        <FormField
+          label="Full name"
+          autoComplete="name"
+          placeholder="Jane Doe"
+          error={errors.name?.message}
+          {...register('name')}
+        />
+      )}
+
+      <FormField
+        label="Email"
+        type="email"
+        autoComplete="email"
+        placeholder="you@example.com"
+        error={errors.email?.message}
+        {...register('email')}
+      />
+
+      <FormField
+        label="Password"
+        type="password"
+        autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+        placeholder={mode === 'login' ? '••••••••' : 'Min. 8 chars, 1 uppercase, 1 number'}
+        error={errors.password?.message}
+        {...register('password')}
+      />
+
+      <Button type="submit" isLoading={isLoading} className="mt-1 w-full" size="lg">
+        {mode === 'login' ? 'Sign in' : 'Create account'}
+      </Button>
+    </form>
   );
 }

@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useForm, type UseFormGetValues, type UseFormTrigger } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ShieldCheck, CreditCard, Lock } from 'lucide-react';
 import {
   Elements,
@@ -71,6 +71,15 @@ export default function CheckoutPage() {
     onError: (err: Error) => toast(err.message, 'error'),
   });
 
+  const items = cart?.items ?? [];
+
+  // Redirect an empty cart to /cart — in an effect, never during render.
+  useEffect(() => {
+    if (!isLoading && items.length === 0) {
+      router.replace('/cart');
+    }
+  }, [isLoading, items.length, router]);
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-24">
@@ -79,10 +88,8 @@ export default function CheckoutPage() {
     );
   }
 
-  const items = cart?.items ?? [];
   if (!items.length) {
-    router.replace('/cart');
-    return null;
+    return null; // redirecting to /cart via the effect above
   }
 
   const total = cart?.total ?? 0;

@@ -45,20 +45,31 @@ export default function HomePage() {
         <section className="relative isolate overflow-hidden bg-[#0c0a07] text-white">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_38%,rgba(0,119,255,0.26),transparent_34%),radial-gradient(circle_at_18%_85%,rgba(184,134,47,0.18),transparent_40%),linear-gradient(110deg,#0c0a07_0%,#11100c_54%,#171410_100%)]" />
           <div className="relative mx-auto grid min-h-[610px] max-w-7xl grid-cols-1 items-center gap-10 px-5 pb-24 pt-16 sm:px-8 lg:grid-cols-[0.92fr_1.08fr] lg:px-12 lg:pb-28">
-            <div className="shopflow-fade-up z-10 max-w-xl">
-              <p className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-primary-500">
+            <div className="z-10 max-w-xl">
+              <p
+                className="shopflow-rise mb-5 inline-block text-sm font-semibold uppercase tracking-[0.24em] text-primary-400"
+                style={{ animationDelay: '0.05s' }}
+              >
                 New Arrival
               </p>
-              <h1 className="max-w-[620px] text-5xl font-black leading-[0.98] tracking-[-0.06em] sm:text-6xl lg:text-7xl">
-                Elevate Your{' '}
-                <span className="block bg-gradient-to-r from-[#0b7cff] to-[#0057ff] bg-clip-text text-transparent">
+              <h1 className="max-w-[620px] text-5xl font-black leading-[0.98] tracking-[-0.04em] sm:text-6xl lg:text-7xl">
+                <span className="shopflow-rise block" style={{ animationDelay: '0.18s' }}>
+                  Elevate Your
+                </span>
+                <span
+                  className="shopflow-rise shopflow-sheen block bg-gradient-to-r from-[#5ab0ff] via-[#0b7cff] to-[#c79a3e] bg-clip-text text-transparent"
+                  style={{ animationDelay: '0.34s' }}
+                >
                   Everyday
                 </span>
               </h1>
-              <p className="mt-7 max-w-md text-lg leading-8 text-white/75">
+              <p
+                className="shopflow-rise mt-7 max-w-md text-lg leading-8 text-white/75"
+                style={{ animationDelay: '0.52s' }}
+              >
                 Discover premium products designed for performance, style and innovation.
               </p>
-              <div className="mt-8 flex flex-wrap items-center gap-5">
+              <div className="shopflow-rise mt-8 flex flex-wrap items-center gap-5" style={{ animationDelay: '0.66s' }}>
                 <Link
                   href="/products"
                   className="inline-flex h-14 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-[#2493ff] to-[#005eff] px-8 text-sm font-bold text-white shadow-[0_16px_40px_rgba(0,104,255,0.36)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_55px_rgba(0,104,255,0.5)]"

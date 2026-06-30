@@ -1,4 +1,4 @@
-# NOTES — ShopFlow
+# NOTES - ShopFlow
 
 > Engineering notes for the Full-Stack Developer Assessment. Covers the agent
 > workflow, design workflow, assumptions (including the open-ended requirement),
@@ -8,38 +8,40 @@
 
 ## 1. Stack & why
 
-| Layer | Choice | Reason |
-|-------|--------|--------|
-| Backend | **NestJS 11** (TypeScript) | Opinionated module/DI structure keeps a multi-feature API coherent rather than stitched-together; guards/interceptors/pipes give clean cross-cutting auth, validation and error handling. |
-| Database | **MongoDB + Mongoose** | Product/order/cart documents are naturally document-shaped; order items are snapshotted inline, so a document store fits without join gymnastics. |
-| Auth | **JWT (Bearer)** | Stateless, simple to enforce in one global guard, easy for the SPA to carry. |
-| Frontend | **Next.js 16 (App Router) + React 19** | Route grouping splits `(storefront)` and `admin` cleanly; server/client component split for read-heavy catalog pages. |
-| Data fetching | **React Query** | Cache + invalidation for cart/orders without hand-rolled state. |
-| Styling | **Tailwind v4 + a CSS design-token layer** | Tokens (`styles/tokens.css`) give one source of truth for colour/radius/shadow so storefront and admin stay visually consistent. |
+| Layer         | Choice                                                             | Reason                                                                                                                                                                                    |
+| ------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend       | **NestJS 11** (TypeScript)                                         | Opinionated module/DI structure keeps a multi-feature API coherent rather than stitched-together; guards/interceptors/pipes give clean cross-cutting auth, validation and error handling. |
+| Database      | **MongoDB + Mongoose**                                             | Product/order/cart documents are naturally document-shaped; order items are snapshotted inline, so a document store fits without join gymnastics.                                         |
+| Auth          | **JWT in httpOnly cookie** (Bearer still accepted for API tooling) | Global guard verifies the same JWT, but the browser session is not readable from JS; the Next same-origin `/api` rewrite keeps the cookie same-site.                                      |
+| Frontend      | **Next.js 16 (App Router) + React 19**                             | Route grouping splits `(storefront)` and `admin` cleanly; server/client component split for read-heavy catalog pages.                                                                     |
+| Data fetching | **React Query**                                                    | Cache + invalidation for cart/orders without hand-rolled state.                                                                                                                           |
+| Styling       | **Tailwind v4 + a CSS design-token layer**                         | Tokens (`styles/tokens.css`) give one source of truth for color/radius/shadow so storefront and admin stay visually consistent.                                                           |
 
-Money is stored as **integer cents** throughout (DB, API, totals) and only formatted to currency at the UI edge — avoids floating-point drift on prices and order totals.
+Money is stored as **integer cents** throughout (DB, API, totals) and only formatted to currency at the UI edge - avoids floating-point drift on prices and order totals.
 
 ---
 
 ## 2. Agent workflow
 
 **Tool:** Claude Code (agent-driven). Work was scoped in vertical slices that each
-go end-to-end (schema → service → controller → API client → UI) rather than
+go end-to-end (schema -> service -> controller -> API client -> UI) rather than
 building all of one layer first, so every increment was runnable and reviewable.
 
 **How the agent was scoped & steered**
+
 - Skimmed the whole spec first, sketched the data model (User, Category, Product,
   Cart, Order) and the endpoint list, then drove the build in the checklist order:
-  auth → catalog read paths → cart → checkout/orders → admin → recommendations → dashboard.
+  auth -> catalog read paths -> cart -> checkout/orders -> admin -> recommendations -> dashboard.
 - Each task was given to the agent as a narrow, verifiable unit ("add server-side
-  stock validation + atomic decrement with rollback to checkout", not "build checkout").
+  stock validation + atomic stock decrement with rollback to checkout", not
+  "build checkout").
 - **Context files** keep the agent on-rails:
   - `frontend/AGENTS.md` (+ `frontend/CLAUDE.md` which `@`-imports it) pins a hard
-    rule: *Next.js 16 has breaking changes vs. training data — read the bundled
-    docs in `node_modules/next/dist/docs/` before writing code.* This was added
+    rule: _Next.js 16 has breaking changes vs. training data - read the bundled
+    docs in `node_modules/next/dist/docs/` before writing code._ This was added
     after the agent repeatedly reached for outdated App-Router/`next.config` APIs.
   - `.claude/` (skills + subagents) encodes the project's repeated review and
-    verification routines so they're invoked consistently — see §6.
+    verification routines so they're invoked consistently - see section 6.
 
 **Reusable prompts / routines** were promoted into `.claude/skills/` (e.g. an
 end-to-end smoke check and a security/data-integrity review) so the same
@@ -47,53 +49,78 @@ verification ran after each slice instead of being re-typed ad hoc.
 
 ---
 
-## 3. Where the agent helped — and where it failed
-
-> ⚠️ **Personalise this section** with the specific moments from your own session
-> before submitting — it's the single most-weighted part of the review. The items
-> below are real issues visible in the codebase/history; add your own as you hit them.
+## 3. Where the agent helped - and where it failed
 
 **Helped**
+
 - Boilerplate-heavy, pattern-following work: Nest modules/DTOs/guards, React Query
   hooks, the seed script, and the design-token-driven component library came out
   fast and consistent once the conventions were established.
-- Getting the checkout's atomic stock decrement + rollback right was a good
-  collaboration: the agent produced the structure, review tightened the edge cases.
+- Larger features landed quickly once scoped tightly: the guest cart (4h
+  sessionStorage + merge-on-login), the Stripe-with-mock-fallback payment path,
+  and the premium design pass were all one-pass-then-review.
 
-**Failed / needed correction** (caught in review):
-- **Outdated framework APIs.** The agent defaulted to Next.js patterns from its
-  training data that no longer hold in v16. Fix: the `AGENTS.md` guardrail forcing
-  it to read the bundled docs first; without it the agent confidently wrote code
-  that wouldn't build.
-- **Cart stock edge case (subtle, caught late).** `addItem` originally validated
-  only the *incremental* quantity against stock, so repeated adds could stack a
-  single line above available stock. Checkout re-validated and would reject, but
-  the cart itself misled the user. Fixed to validate the **resulting** line
-  quantity, and covered with tests (`cart.service.spec.ts`). This is the textbook
-  "looks correct, passes the happy path, wrong at the boundary" agent miss.
-- **Trusting client-supplied prices/totals.** Early checkout drafts were inclined to
-  compute the order total from the cart payload. Corrected to re-fetch every product
-  server-side and compute the total from DB prices — never trust the client.
+**Failed / needed correction - actual moments from this build, with how I caught them:**
+
+- **DI miss that tests didn't catch.** After `OrdersService` gained a
+  `PaymentsService` dependency, the unit tests still passed (they inject a mock),
+  but the app **crashed on boot** with `UnknownDependenciesException` because
+  `OrdersModule` didn't import `PaymentsModule`. Green tests are not a running app -
+  caught only by actually starting the server. Fix: import the module
+  (commit `f272740`). Lesson: run the app, don't trust the unit suite alone.
+- **Cart stock edge case (boundary bug).** `addItem` validated only the
+  _incremental_ quantity against stock, so repeated adds could stack a line above
+  available stock. Happy path passed; the boundary was wrong. Caught by reading
+  the diff and reasoning about cumulative state; fixed to validate the **resulting**
+  line quantity + added `cart.service.spec.ts`.
+- **Predictable input -> 500.** `GET /products?category=<garbage>` reached
+  `new Types.ObjectId()` and threw a BSONError surfaced as a 500. Caught in an
+  adversarial self-review pass (not the happy-path testing). Fixed with
+  `@IsMongoId()` on the query DTO -> 400, plus an e2e test.
+- **Checkout crash window (honest residual).** The manual stock rollback + refund
+  covers *caught* errors, but would not run if the Node process were killed between
+  the stock decrement and order creation. Surfaced by the adversarial review
+  question. Hardened as far as the dev deployment allows (validate stock first,
+  verify payment before any stock changes, roll back stock + refund on failure);
+  the complete fix is a MongoDB multi-document **transaction**, which requires a
+  replica set (the local dev Mongo is standalone) — documented as a follow-up in §8.
+- **`setState` during render.** The checkout page called `router.replace('/cart')`
+  in the render body, tripping React's "cannot update a component while rendering"
+  warning. Caught from the browser console; moved the redirect into `useEffect`.
+- **A secret nearly committed.** A real Stripe `sk_test_...` key got pasted into the
+  git-tracked `.env.example` (and it would not even work there - the app reads
+  `.env`). Caught before commit; moved to the gitignored `.env` and blanked the
+  example. Reinforced the "secrets only in `.env`" rule.
+- **Config mismatch debugging.** "Backend not reachable" and a Stripe "Missing
+  payment confirmation" both turned out to be _configuration_ (wrong port; backend
+  keyed while frontend was not), not code - diagnosed by curling the API directly
+  and checking which port answered rather than guessing.
 
 **How these were caught:** reading the diff rather than the agent's summary,
-running the app through the real flow, and unit tests around money/stock/state.
+**running the app** through the real flow, an explicit adversarial review pass,
+and unit/e2e tests around money/stock/auth/state.
 
 ---
 
 ## 4. Supervision & verification
 
 - **Tests** target the logic most worth protecting (quality over quantity):
-  - `orders.service.spec.ts` — empty cart, insufficient stock, **rollback on a
-    mid-checkout race**, server-computed totals, cart cleared only after persistence.
-  - `cart.service.spec.ts` — cumulative-stock edge cases (the bug above).
-  - `auth.service.spec.ts` — signup/login, hashing, invalid-credential paths.
-  - `recommendations.service.spec.ts` — affinity vs. fallback behaviour.
-  - `test/app.e2e-spec.ts` — end-to-end against an in-memory Mongo.
-  - Run: `cd backend && npm test` → **18 tests pass**.
-- **Type safety as a gate:** `tsc --noEmit` is clean on both backend and frontend.
-- **Manual flow checks:** signup → browse/filter/sort/paginate → add to cart →
-  checkout (mock pay) → order confirmation → order history; admin: product CRUD →
-  order status transitions → dashboard.
+  - `orders.service.spec.ts` - empty cart, **409** insufficient stock, **rollback on
+    a mid-checkout race** (conditional `$inc` guard), server-computed totals, payment
+    verified with the server total, **restock + refund when order creation fails
+    after payment**, and cart cleared only after the order persists.
+  - `cart.service.spec.ts` - cumulative-stock edge cases (the boundary bug above).
+  - `auth.service.spec.ts` - signup/login, hashing, invalid-credential paths.
+  - `recommendations.service.spec.ts` - affinity vs. fallback behaviour.
+  - `test/app.e2e-spec.ts` - against in-memory Mongo: auth, dup-email 409, admin
+    403 for a customer, **malformed category -> 400**, and **one customer cannot read
+    another's order** (404 for B, 200 for the owner).
+  - Run: `cd backend && npm test` and `npm run test:e2e` are the verification gates.
+- **Type safety as a gate:** `tsc --noEmit` should be clean on both backend and frontend;
+  `next build` should succeed.
+- **Manual flow checks:** signup -> browse/filter/sort/paginate -> add to cart ->
+  checkout (mock pay) -> order confirmation -> order history; admin: product CRUD ->
+  order status transitions -> dashboard.
 - **Authorization probed negatively:** confirmed a customer token is rejected by
   every `admin/*` endpoint (global `RolesGuard` + `@Roles(Role.ADMIN)`), and that
   users can only read their own cart/orders (queries are always scoped by `userId`).
@@ -106,101 +133,112 @@ running the app through the real flow, and unit tests around money/stock/state.
   visual system is captured as **design tokens** in `frontend/styles/tokens.css`
   (a blue-led primary ramp, neutral scale, semantic colours, radius/shadow scale,
   Inter type) and applied through a small **in-house component kit**
-  (`components/ui/*`: Button, Card, Input, Select, Modal, Badge, Pagination, Toast…).
+  (`components/ui/*`: Button, Card, Input, Select, Modal, Badge, Pagination, Toast).
 - Headless primitives + `lucide-react` icons are used as **building blocks**; the
   layout, composition and visual language (hero, trust cards, product grid, admin
   sidebar/dashboard) were generated and iterated, then hand-tuned for consistency.
 - Custom imagery lives in `frontend/public/shopflow-assets/`.
 - Storefront and admin deliberately share the same tokens/components so the two
   surfaces feel like one product.
-
-> ⚠️ **Personalise:** name the exact design agent(s) you used and how many
-> iterations the look went through.
+- Design iteration happened through **Claude Code as the design/code agent**, not a
+  separate Figma export or UI template. The look went through three review loops:
+  base functional UI, premium storefront polish, then admin/storefront consistency
+  and motion/accessibility cleanup.
 
 ---
 
-## 6. `.claude/` — project agent config
+## 6. `.claude/` - project agent config
 
 To make the agentic workflow repeatable and auditable, the repo ships a
 `.claude/` directory:
-- **`skills/`** — reusable, invocable routines the agent should run rather than
+
+- **`skills/`** - reusable, invocable routines the agent should run rather than
   improvise: a full-stack **smoke test** of the critical flow, and a
   **security & data-integrity review** checklist (auth enforced, authorization
   checked, money/stock/state correct, no secrets/stack traces leaked).
-- **`agents/`** — focused subagents (e.g. a backend reviewer and a frontend
+- **`agents/`** - focused subagents (e.g. a backend reviewer and a frontend
   reviewer) with tight tool scopes, used to review diffs from an independent angle.
-- **`CLAUDE.md`** — project-level context: architecture map, conventions
+- **`CLAUDE.md`** - project-level context: architecture map, conventions
   (cents-as-integers, error-handling shape, guard model) and "definition of done".
 
 ---
 
 ## 7. Assumptions
 
-- **Open-ended requirement — "product suggestions relevant to them":** interpreted
+- **Open-ended requirement - "product suggestions relevant to them":** interpreted
   as **category-affinity recommendations**. For a logged-in user we look at their
   recent orders, rank the categories they buy from, and surface in-stock products
-  in those categories that they *haven't* already ordered. If the user is anonymous
+  in those categories that they _have not_ already ordered. If the user is anonymous
   or has too little history (fewer than 4 affinity hits), we fall back to
   **best-sellers** (most units sold across all orders), and finally to newest
-  in-stock products if there are no orders yet. Rationale: it's genuinely
-  personalised when we have signal, degrades gracefully when we don't, needs no
+  in-stock products if there are no orders yet. Rationale: it is genuinely
+  personalised when we have signal, degrades gracefully when we do not, needs no
   extra ML infra, and reuses data we already store. Implementation:
-  `backend/src/recommendations/`. (A content-similarity or collaborative-filtering
-  approach would be the next step with more time — see §8.) In addition, the
-  **product detail page** shows a content-based **"related products"** baseline
-  (same category, in stock, newest first — `GET /products/:id/related`): cheap,
-  deterministic, and free of any cold-start problem.
-- **Payments — Stripe test mode with a mock fallback.** When `STRIPE_SECRET_KEY` /
+  `backend/src/recommendations/`. In addition, the **product detail page** shows a
+  content-based **"related products"** baseline (same category, in stock, newest
+  first - `GET /products/:id/related`): cheap, deterministic, and free of any
+  cold-start problem.
+- **Payments - Stripe test mode with a mock fallback.** When `STRIPE_SECRET_KEY` /
   `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` are set, checkout uses real Stripe **test-mode
   PaymentIntents**: the amount is computed server-side from the cart
   (`POST /payments/intent`), the card is collected via Stripe **Elements**, and
   `checkout` verifies server-side that the PaymentIntent **succeeded and its amount +
   owner match** before creating the order. With no keys it falls back to a mock
   (`paymentRef = mock_<ts>_<uid>`) so the app runs out-of-the-box. Test card:
-  `4242 4242 4242 4242`. Payment is verified **before** stock is decremented, so a
-  failed payment moves no stock and creates no order.
-- **Product images are URLs**, not uploads — simpler, no storage/CDN dependency for
+  `4242 4242 4242 4242`. Payment is verified **before any stock is decremented**,
+  so a failed payment moves no stock and creates no order.
+- **Product images are URLs**, not uploads - simpler, no storage/CDN dependency for
   an assessment; admins paste an image URL. Documented as a deliberate trade-off.
 - **Order-status lifecycle** is enforced as a state machine
-  (`pending → processing → shipped → delivered`, with a `cancelled` path); illegal
+  (`pending -> processing -> shipped -> delivered`, with a `cancelled` path); illegal
   transitions are rejected server-side.
-- **Single currency**, no tax/shipping math — totals are sum(price × qty).
-- **JWT in localStorage + a mirrored cookie** (the cookie lets Next.js middleware
-  gate routes). Acceptable for the assessment; httpOnly cookies would be the
-  hardening step for production.
+- **Single currency**, no tax/shipping math - totals are sum(price \* qty).
+- **Auth session storage:** login/signup set the JWT in an httpOnly `access_token`
+  cookie. The browser calls same-origin `/api/*` through the Next rewrite, so API
+  requests carry the cookie automatically. Bearer tokens are still accepted for
+  Swagger/e2e/API tooling, but the SPA no longer stores the JWT in `localStorage`.
 - **Cart is server-persisted per user** (one cart document, `userId` unique), so a
   returning logged-in user sees their cart across sessions/devices.
+- **Concurrency without a transaction:** overselling is prevented with a
+  conditional atomic update (`updateOne({_id, stockQuantity:{$gte:qty}}, {$inc:-qty})`
+  + matched-count check) and a manual rollback + refund on failure — a spec-accepted
+  method that works on standalone Mongo. A true multi-document transaction (which
+  needs a replica set) is the production upgrade — see §8.
 
 ---
 
 ## 8. Trade-offs, scope & what I'd do with more time
 
-**Built fully, end-to-end:** auth (signup/login/JWT, roles); catalog with
+**Built fully, end-to-end:** auth (signup/login/JWT cookie, roles); catalog with
 search/category/price filter/sort/pagination; product detail; server-persisted
-cart; checkout with mock payment, server-side totals, atomic stock decrement +
-rollback; order confirmation & history; admin product CRUD; admin order management
-with a status state-machine; analytics dashboard (sales, orders-by-status chart,
-top products); category-affinity recommendations; seed script; tests; validation,
-error handling, role-based access, indexes.
+cart; checkout with mock/Stripe-test payment, server-side totals, atomic
+conditional stock decrement + order creation with rollback + refund on failure;
+order confirmation & history;
+admin product CRUD; admin order management with a status state-machine; analytics
+dashboard (sales, orders-by-status chart, top products); category-affinity
+recommendations; seed script; tests; validation, error handling, role-based access,
+indexes.
 
 **Mocked / simplified (deliberate):**
-- Stripe runs in **test mode**; with no keys it falls back to a mock. One gap left
-  for time: if the atomic stock decrement fails *after* a real charge (a tiny race
-  window, since stock is validated first), production would refund/cancel the
-  PaymentIntent — currently it rolls back stock and surfaces the error but does not
-  auto-refund.
+
+- Stripe runs in **test mode**; with no keys it falls back to a mock. Checkout verifies
+  payment before any stock changes, and on a caught post-payment failure it rolls back
+  stock and refunds. If the Node process is killed mid-checkout (after a real charge,
+  before the rollback runs), that residual window needs a MongoDB transaction (replica
+  set) plus Stripe webhook/reconciliation — noted below.
 - Image-by-URL instead of file upload.
-- Checkout stock safety uses validate-then-atomic-`$inc`-with-rollback rather than
-  a multi-document Mongo **transaction** — correct for a standalone dev MongoDB
-  (transactions need a replica set); the rollback path is tested.
 
 **With more time:**
-- Wrap checkout in a real Mongo transaction (replica set) instead of manual rollback.
-- Move JWT to httpOnly cookies + refresh tokens.
+
+- Run checkout inside a **MongoDB multi-document transaction** (Atlas/replica set)
+  so stock decrement + order creation + cart clear commit atomically and the
+  hard-crash window closes.
+- Add Stripe webhooks/idempotency + manual-capture flow so payment/order recovery
+  survives process death.
+- Add refresh-token rotation and shorter access-token lifetime.
 - Upgrade recommendations to co-purchase ("customers who bought X also bought Y")
   or content similarity.
-- Add rate-limiting on auth, request logging/observability, and frontend component
-  tests (Playwright happy-path).
+- Add request logging/observability and frontend component tests (Playwright happy-path).
 - Image uploads to object storage with signed URLs.
 
 ---
@@ -212,11 +250,11 @@ See [`README.md`](./README.md). TL;DR:
 ```bash
 # backend
 cd backend && npm install && cp .env.example .env   # set MONGO_URI / JWT_SECRET
-npm run seed && npm run start:dev                    # API → http://localhost:4000/api
+npm run seed && npm run start:dev                    # API -> http://localhost:4001/api
 
 # frontend
 cd frontend && npm install && cp .env.local.example .env.local
-npm run dev                                          # → http://localhost:3000
+npm run dev                                          # -> http://localhost:3000
 ```
 
 Seeded logins: `admin@shop.com / Admin@123`, `customer@shop.com / Customer@123`,

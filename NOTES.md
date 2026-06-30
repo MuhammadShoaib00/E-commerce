@@ -77,13 +77,14 @@ verification ran after each slice instead of being re-typed ad hoc.
   `new Types.ObjectId()` and threw a BSONError surfaced as a 500. Caught in an
   adversarial self-review pass (not the happy-path testing). Fixed with
   `@IsMongoId()` on the query DTO -> 400, plus an e2e test.
-- **Checkout crash window (honest residual).** The manual stock rollback + refund
-  covers *caught* errors, but would not run if the Node process were killed between
-  the stock decrement and order creation. Surfaced by the adversarial review
-  question. Hardened as far as the dev deployment allows (validate stock first,
-  verify payment before any stock changes, roll back stock + refund on failure);
-  the complete fix is a MongoDB multi-document **transaction**, which requires a
-  replica set (the local dev Mongo is standalone) — documented as a follow-up in §8.
+- **Checkout crash window.** Manual rollback only runs for *caught* errors — a
+  process kill between the stock decrement and order creation would leave stock
+  reserved with no order. Surfaced by the adversarial review question. Fixed by
+  wrapping stock decrement + order creation + cart clear in a **MongoDB
+  transaction** so they commit atomically. Because transactions need a replica
+  set, there's a **conditional-`$inc` + manual-rollback + refund fallback** for a
+  standalone dev Mongo (and a unit test for that path) — so it's correct on a
+  replica set and still runs locally.
 - **`setState` during render.** The checkout page called `router.replace('/cart')`
   in the render body, tripping React's "cannot update a component while rendering"
   warning. Caught from the browser console; moved the redirect into `useEffect`.
@@ -202,11 +203,12 @@ To make the agentic workflow repeatable and auditable, the repo ships a
   Swagger/e2e/API tooling, but the SPA no longer stores the JWT in `localStorage`.
 - **Cart is server-persisted per user** (one cart document, `userId` unique), so a
   returning logged-in user sees their cart across sessions/devices.
-- **Concurrency without a transaction:** overselling is prevented with a
-  conditional atomic update (`updateOne({_id, stockQuantity:{$gte:qty}}, {$inc:-qty})`
-  + matched-count check) and a manual rollback + refund on failure — a spec-accepted
-  method that works on standalone Mongo. A true multi-document transaction (which
-  needs a replica set) is the production upgrade — see §8.
+- **Concurrency & atomicity:** checkout runs in a **MongoDB transaction**
+  (decrement + order create + cart clear commit together). Overselling is also
+  guarded by a conditional update (`updateOne({_id, stockQuantity:{$gte:qty}},
+  {$inc:-qty})` + matched-count check). On a deployment without transactions
+  (standalone dev Mongo) it **falls back** to that conditional update plus manual
+  rollback + refund — so it's atomic on a replica set and still works locally.
 
 ---
 
@@ -224,18 +226,17 @@ indexes.
 
 **Mocked / simplified (deliberate):**
 
-- Stripe runs in **test mode**; with no keys it falls back to a mock. Checkout verifies
-  payment before any stock changes, and on a caught post-payment failure it rolls back
-  stock and refunds. If the Node process is killed mid-checkout (after a real charge,
-  before the rollback runs), that residual window needs a MongoDB transaction (replica
-  set) plus Stripe webhook/reconciliation — noted below.
+- Stripe runs in **test mode**; with no keys it falls back to a mock. Checkout
+  verifies payment before any stock changes and commits the order in a MongoDB
+  transaction (or the conditional-update fallback on standalone Mongo). The
+  remaining production hardening is Stripe webhook/reconciliation for the rare
+  charge-succeeded-but-server-died case.
 - Image-by-URL instead of file upload.
 
 **With more time:**
 
-- Run checkout inside a **MongoDB multi-document transaction** (Atlas/replica set)
-  so stock decrement + order creation + cart clear commit atomically and the
-  hard-crash window closes.
+- Run the local dev Mongo as a single-node **replica set** so the transaction
+  path (already implemented) is exercised in dev too, not just the fallback.
 - Add Stripe webhooks/idempotency + manual-capture flow so payment/order recovery
   survives process death.
 - Add refresh-token rotation and shorter access-token lifetime.

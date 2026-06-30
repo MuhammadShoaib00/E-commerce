@@ -115,7 +115,10 @@ and unit/e2e tests around money/stock/auth/state.
   - `test/app.e2e-spec.ts` - against in-memory Mongo: auth, dup-email 409, admin
     403 for a customer, **malformed category -> 400**, and **one customer cannot read
     another's order** (404 for B, 200 for the owner).
-  - Run: `cd backend && npm test` and `npm run test:e2e` are the verification gates.
+  - Frontend (Vitest, `cd frontend && npm test`): guest-cart cumulative-stock guard
+    + persistence, `cartTotal`, and `formatCurrency` (cents→display).
+  - Run: `cd backend && npm test` (21) + `npm run test:e2e` (11); `cd frontend &&
+    npm test` (6) are the verification gates.
 - **Type safety as a gate:** `tsc --noEmit` should be clean on both backend and frontend;
   `next build` should succeed.
 - **Manual flow checks:** signup -> browse/filter/sort/paginate -> add to cart ->

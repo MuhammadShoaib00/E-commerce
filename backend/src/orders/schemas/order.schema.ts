@@ -23,7 +23,7 @@ const OrderItemSchema = SchemaFactory.createForClass(OrderItem);
 
 @Schema({ timestamps: true })
 export class Order {
-  @Prop({ type: Types.ObjectId, ref: 'User', required: true, index: true })
+  @Prop({ type: Types.ObjectId, ref: 'User', required: true })
   userId: Types.ObjectId;
 
   @Prop({ type: [OrderItemSchema], required: true })
@@ -50,3 +50,8 @@ export class Order {
 }
 
 export const OrderSchema = SchemaFactory.createForClass(Order);
+
+// User order-history: filter by userId, sort by createdAt desc.
+OrderSchema.index({ userId: 1, createdAt: -1 });
+// Admin order list: optional status filter + createdAt sort; analytics groups by status.
+OrderSchema.index({ status: 1, createdAt: -1 });

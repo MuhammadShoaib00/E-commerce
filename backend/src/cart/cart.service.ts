@@ -33,9 +33,6 @@ export class CartService {
   async addItem(userId: string, dto: AddToCartDto): Promise<any> {
     const product = await this.productModel.findById(dto.productId).exec();
     if (!product) throw new NotFoundException('Product not found');
-    if (product.stockQuantity < dto.quantity) {
-      throw new BadRequestException(`Only ${product.stockQuantity} units available`);
-    }
 
     const cart = await this.cartModel.findOneAndUpdate(
       { userId: new Types.ObjectId(userId) },
@@ -47,8 +44,19 @@ export class CartService {
       (item) => item.productId.toString() === dto.productId,
     );
 
+    // Validate the *resulting* line quantity against stock, not just the
+    // increment — otherwise repeated adds could stack a line above stock.
+    const currentQty = existingIndex >= 0 ? cart.items[existingIndex].quantity : 0;
+    const resultingQty = currentQty + dto.quantity;
+    if (product.stockQuantity < resultingQty) {
+      throw new BadRequestException(
+        `Only ${product.stockQuantity} units available` +
+          (currentQty ? ` (you already have ${currentQty} in your cart)` : ''),
+      );
+    }
+
     if (existingIndex >= 0) {
-      cart.items[existingIndex].quantity += dto.quantity;
+      cart.items[existingIndex].quantity = resultingQty;
     } else {
       cart.items.push({
         productId: new Types.ObjectId(dto.productId),

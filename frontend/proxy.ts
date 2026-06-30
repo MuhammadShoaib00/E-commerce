@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const PROTECTED_PREFIXES = ['/cart', '/checkout', '/orders'];
+// NB: /cart is intentionally public — guests have a sessionStorage cart and are
+// only sent to sign-in when they proceed to checkout.
+const PROTECTED_PREFIXES = ['/checkout', '/orders'];
 const ADMIN_PREFIX = '/admin';
 
 export function proxy(request: NextRequest) {
@@ -20,5 +22,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/admin/:path*', '/cart', '/checkout', '/orders', '/orders/:path*'],
+  matcher: ['/admin/:path*', '/checkout', '/orders', '/orders/:path*'],
 };

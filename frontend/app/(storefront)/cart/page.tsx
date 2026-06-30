@@ -2,45 +2,34 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2, Minus, Plus, ShoppingBag } from 'lucide-react';
-import { cartApi } from '@/lib/api/cart';
-import { useCartStore } from '@/lib/store/cartStore';
+import { Trash2, Minus, Plus, ShoppingBag, LogIn } from 'lucide-react';
+import { useCart } from '@/features/cart/hooks/useCart';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
-import type { CartItem } from '@/types';
 
 export default function CartPage() {
-  const queryClient = useQueryClient();
-  const setItemCount = useCartStore((s) => s.setItemCount);
+  const { items, total, itemCount, isLoading, isGuest, updateItem, removeItem } = useCart();
   const { toast } = useToast();
 
-  const { data: cart, isLoading } = useQuery({
-    queryKey: ['cart'],
-    queryFn: cartApi.get,
-  });
-
-  const invalidate = (cart: { items: CartItem[] }) => {
-    const count = cart.items.reduce((s, i) => s + i.quantity, 0);
-    setItemCount(count);
-    queryClient.invalidateQueries({ queryKey: ['cart'] });
+  const change = async (productId: string, quantity: number) => {
+    try {
+      await updateItem(productId, quantity);
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not update item', 'error');
+    }
   };
 
-  const update = useMutation({
-    mutationFn: ({ productId, quantity }: { productId: string; quantity: number }) =>
-      cartApi.updateItem(productId, quantity),
-    onSuccess: invalidate,
-    onError: (err: Error) => toast(err.message, 'error'),
-  });
-
-  const remove = useMutation({
-    mutationFn: (productId: string) => cartApi.removeItem(productId),
-    onSuccess: invalidate,
-    onError: (err: Error) => toast(err.message, 'error'),
-  });
+  const drop = async (productId: string) => {
+    try {
+      await removeItem(productId);
+      toast('Item removed from cart', 'info');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not remove item', 'error');
+    }
+  };
 
   if (isLoading) {
     return (
@@ -50,16 +39,13 @@ export default function CartPage() {
     );
   }
 
-  const items = cart?.items ?? [];
-  const total = cart?.total ?? 0;
-
   if (!items.length) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-16">
         <EmptyState
           title="Your cart is empty"
           description="Add some products to get started."
-          action={{ label: 'Browse products', onClick: () => window.location.href = '/products' }}
+          action={{ label: 'Browse products', onClick: () => (window.location.href = '/products') }}
         />
       </div>
     );
@@ -71,7 +57,7 @@ export default function CartPage() {
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* Items */}
-        <div className="flex-1 bg-white rounded-2xl border border-neutral-200 divide-y divide-neutral-100">
+        <div className="flex-1 w-full bg-white rounded-2xl border border-neutral-200 divide-y divide-neutral-100">
           {items.map((item) => {
             const product = item.productId;
             const lineTotal = product.price * item.quantity;
@@ -96,8 +82,8 @@ export default function CartPage() {
 
                   <div className="flex items-center gap-2 mt-auto">
                     <button
-                      onClick={() => update.mutate({ productId: product._id, quantity: item.quantity - 1 })}
-                      disabled={item.quantity <= 1 || update.isPending}
+                      onClick={() => change(product._id, item.quantity - 1)}
+                      disabled={item.quantity <= 1}
                       className="w-7 h-7 rounded-md border border-neutral-200 flex items-center justify-center text-neutral-600 hover:bg-neutral-50 disabled:opacity-40"
                       aria-label="Decrease"
                     >
@@ -105,16 +91,15 @@ export default function CartPage() {
                     </button>
                     <span className="w-6 text-center text-sm font-medium">{item.quantity}</span>
                     <button
-                      onClick={() => update.mutate({ productId: product._id, quantity: item.quantity + 1 })}
-                      disabled={item.quantity >= product.stockQuantity || update.isPending}
+                      onClick={() => change(product._id, item.quantity + 1)}
+                      disabled={item.quantity >= product.stockQuantity}
                       className="w-7 h-7 rounded-md border border-neutral-200 flex items-center justify-center text-neutral-600 hover:bg-neutral-50 disabled:opacity-40"
                       aria-label="Increase"
                     >
                       <Plus className="w-3 h-3" />
                     </button>
                     <button
-                      onClick={() => remove.mutate(product._id)}
-                      disabled={remove.isPending}
+                      onClick={() => drop(product._id)}
                       className="ml-2 p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                       aria-label="Remove"
                     >
@@ -135,18 +120,33 @@ export default function CartPage() {
         <div className="w-full lg:w-72 bg-white rounded-2xl border border-neutral-200 p-5 flex flex-col gap-4">
           <h2 className="font-semibold text-neutral-900">Order Summary</h2>
           <div className="flex justify-between text-sm text-neutral-600">
-            <span>{items.reduce((s, i) => s + i.quantity, 0)} items</span>
+            <span>{itemCount} item{itemCount !== 1 ? 's' : ''}</span>
             <span>{formatCurrency(total)}</span>
           </div>
           <div className="border-t border-neutral-100 pt-4 flex justify-between font-bold text-neutral-900">
             <span>Total</span>
             <span>{formatCurrency(total)}</span>
           </div>
-          <Link href="/checkout">
-            <Button className="w-full" size="lg">
-              Proceed to Checkout
-            </Button>
-          </Link>
+
+          {isGuest ? (
+            <>
+              <Link href="/auth/login?redirect=/checkout">
+                <Button className="w-full" size="lg" leftIcon={<LogIn className="w-4 h-4" />}>
+                  Sign in to checkout
+                </Button>
+              </Link>
+              <p className="text-center text-xs text-neutral-500">
+                Your cart is saved for 4 hours and will move to your account when you sign in.
+              </p>
+            </>
+          ) : (
+            <Link href="/checkout">
+              <Button className="w-full" size="lg">
+                Proceed to Checkout
+              </Button>
+            </Link>
+          )}
+
           <Link href="/products" className="text-center text-sm text-primary-600 hover:underline">
             Continue shopping
           </Link>

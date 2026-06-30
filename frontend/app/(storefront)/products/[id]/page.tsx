@@ -1,24 +1,23 @@
 'use client';
 
 import { use, useState } from 'react';
-import Image from 'next/image';
 import Link from 'next/link';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { ShoppingCart, ArrowLeft, Minus, Plus } from 'lucide-react';
 import { productsApi } from '@/lib/api/products';
-import { cartApi } from '@/lib/api/cart';
-import { useCartStore } from '@/lib/store/cartStore';
+import { useCart } from '@/features/cart/hooks/useCart';
 import { useToast } from '@/components/ui/Toast';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
+import { ProductMedia } from '@/features/catalog/ProductMedia';
 
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [qty, setQty] = useState(1);
-  const queryClient = useQueryClient();
-  const setItemCount = useCartStore((s) => s.setItemCount);
+  const [adding, setAdding] = useState(false);
+  const { addItem } = useCart();
   const { toast } = useToast();
 
   const { data: product, isLoading, error } = useQuery({
@@ -26,16 +25,18 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
     queryFn: () => productsApi.getById(id),
   });
 
-  const addToCart = useMutation({
-    mutationFn: () => cartApi.addItem(id, qty),
-    onSuccess: (cart) => {
-      const count = cart.items.reduce((s, i) => s + i.quantity, 0);
-      setItemCount(count);
-      queryClient.invalidateQueries({ queryKey: ['cart'] });
-      toast(`Added ${qty} × "${product?.name}" to cart`, 'success');
-    },
-    onError: (err: Error) => toast(err.message, 'error'),
-  });
+  const handleAddToCart = async () => {
+    if (!product) return;
+    setAdding(true);
+    try {
+      await addItem(product, qty);
+      toast(`Added ${qty} × "${product.name}" to cart`, 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Could not add to cart', 'error');
+    } finally {
+      setAdding(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -70,25 +71,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
 
       <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
-          {/* Image */}
-          <div className="relative aspect-square bg-neutral-50">
-            {product.imageUrl ? (
-              <Image
-                src={product.imageUrl}
-                alt={product.name}
-                fill
-                className="object-cover"
-                sizes="(max-width: 768px) 100vw, 50vw"
-                priority
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-neutral-300">
-                <svg className="w-24 h-24" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-            )}
-          </div>
+          {/* Media: image + interactive 3D preview */}
+          <ProductMedia imageUrl={product.imageUrl} name={product.name} />
 
           {/* Details */}
           <div className="p-8 flex flex-col gap-5">
@@ -149,9 +133,9 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             <Button
               size="lg"
               leftIcon={<ShoppingCart className="w-5 h-5" />}
-              isLoading={addToCart.isPending}
+              isLoading={adding}
               disabled={outOfStock}
-              onClick={() => addToCart.mutate()}
+              onClick={handleAddToCart}
               className="mt-2"
             >
               {outOfStock ? 'Out of Stock' : 'Add to Cart'}

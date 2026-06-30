@@ -11,14 +11,14 @@ import {
   UserRound,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth/AuthProvider';
-import { useCartStore } from '@/lib/store/cartStore';
+import { useCart } from '@/features/cart/hooks/useCart';
 import { cn } from '@/lib/utils/cn';
 import { Button } from '../ui/Button';
 
 export function Navbar() {
   const pathname = usePathname();
   const { user, isAdmin, logout } = useAuth();
-  const itemCount = useCartStore((store) => store.itemCount);
+  const { itemCount } = useCart();
 
   const navLinks = [
     { href: '/', label: 'Home' },
@@ -104,17 +104,22 @@ export function Navbar() {
               </>
             ) : (
               <>
-                <Link href="/auth/login">
-                  <button className="grid h-10 w-10 place-items-center rounded-full text-white transition hover:bg-white/10" aria-label="Sign in">
-                    <UserRound className="h-6 w-6" />
-                  </button>
-                </Link>
                 <Link
                   href="/cart"
-                  className="grid h-10 w-10 place-items-center rounded-full text-white transition hover:bg-white/10"
-                  aria-label="Cart"
+                  className="relative grid h-10 w-10 place-items-center rounded-full text-white transition hover:bg-white/10"
+                  aria-label={`Cart (${itemCount} items)`}
                 >
                   <ShoppingCart className="h-6 w-6" />
+                  {itemCount > 0 && (
+                    <span className="absolute -right-0.5 -top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary-600 text-xs font-bold text-white">
+                      {itemCount > 9 ? '9+' : itemCount}
+                    </span>
+                  )}
+                </Link>
+                <Link href="/auth/login">
+                  <Button variant="outline" size="sm" leftIcon={<UserRound className="h-4 w-4" />}>
+                    Sign in
+                  </Button>
                 </Link>
               </>
             )}

@@ -1,11 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Heart, ShoppingCart, Star } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { cartApi } from '@/lib/api/cart';
-import { useCartStore } from '@/lib/store/cartStore';
+import { useCart } from '@/features/cart/hooks/useCart';
 import { useToast } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { Badge } from '@/components/ui/Badge';
@@ -16,20 +15,21 @@ interface ProductCardProps {
 }
 
 export function ProductCard({ product }: ProductCardProps) {
-  const queryClient = useQueryClient();
-  const setItemCount = useCartStore((store) => store.setItemCount);
+  const { addItem } = useCart();
   const { toast } = useToast();
+  const [adding, setAdding] = useState(false);
 
-  const addToCart = useMutation({
-    mutationFn: () => cartApi.addItem(product._id, 1),
-    onSuccess: (cart) => {
-      const count = cart.items.reduce((sum, item) => sum + item.quantity, 0);
-      setItemCount(count);
-      queryClient.invalidateQueries({ queryKey: ['cart'] });
+  const handleAdd = async () => {
+    setAdding(true);
+    try {
+      await addItem(product, 1);
       toast(`"${product.name}" added to cart`, 'success');
-    },
-    onError: (error: Error) => toast(error.message, 'error'),
-  });
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'Could not add to cart', 'error');
+    } finally {
+      setAdding(false);
+    }
+  };
 
   const outOfStock = product.stockQuantity === 0;
 
@@ -78,12 +78,12 @@ export function ProductCard({ product }: ProductCardProps) {
             {formatCurrency(product.price)}
           </span>
           <button
-            onClick={() => addToCart.mutate()}
-            disabled={outOfStock || addToCart.isPending}
+            onClick={handleAdd}
+            disabled={outOfStock || adding}
             className="grid h-11 w-11 place-items-center rounded-full bg-primary-600 text-white shadow-[0_12px_25px_rgba(0,101,255,0.28)] transition hover:-translate-y-0.5 hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={`Add ${product.name} to cart`}
           >
-            {addToCart.isPending ? <span className="text-xs font-bold">...</span> : <ShoppingCart className="h-5 w-5" />}
+            {adding ? <span className="text-xs font-bold">...</span> : <ShoppingCart className="h-5 w-5" />}
           </button>
         </div>
         {product.stockQuantity > 0 && product.stockQuantity <= 5 && (

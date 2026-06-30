@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { CartService } from './cart.service';
 import { Cart } from './schemas/cart.schema';
@@ -42,7 +42,7 @@ describe('CartService (addItem stock integrity)', () => {
 
     await expect(
       service.addItem(userId, { productId, quantity: 5 }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('rejects when existing cart qty + new qty exceeds stock (cumulative)', async () => {
@@ -58,7 +58,7 @@ describe('CartService (addItem stock integrity)', () => {
 
     await expect(
       service.addItem(userId, { productId, quantity: 2 }),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(save).not.toHaveBeenCalled();
   });
 

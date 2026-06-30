@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Cart, CartDocument } from './schemas/cart.schema';
@@ -49,7 +49,7 @@ export class CartService {
     const currentQty = existingIndex >= 0 ? cart.items[existingIndex].quantity : 0;
     const resultingQty = currentQty + dto.quantity;
     if (product.stockQuantity < resultingQty) {
-      throw new BadRequestException(
+      throw new ConflictException(
         `Only ${product.stockQuantity} units available` +
           (currentQty ? ` (you already have ${currentQty} in your cart)` : ''),
       );
@@ -78,7 +78,7 @@ export class CartService {
     const product = await this.productModel.findById(productId).exec();
     if (!product) throw new NotFoundException('Product not found');
     if (product.stockQuantity < dto.quantity) {
-      throw new BadRequestException(`Only ${product.stockQuantity} units available`);
+      throw new ConflictException(`Only ${product.stockQuantity} units available`);
     }
 
     item.quantity = dto.quantity;

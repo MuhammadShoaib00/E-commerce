@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -46,7 +47,7 @@ export class OrdersService {
         throw new NotFoundException(`Product not found`);
       }
       if (product.stockQuantity < item.quantity) {
-        throw new BadRequestException(
+        throw new ConflictException(
           `Insufficient stock for "${product.name}": only ${product.stockQuantity} available`,
         );
       }
@@ -89,7 +90,7 @@ export class OrdersService {
           { $inc: { stockQuantity: -item.quantity } },
         );
         if (result.matchedCount === 0) {
-          throw new BadRequestException(
+          throw new ConflictException(
             `"${product.name}" is no longer available in the requested quantity`,
           );
         }
@@ -164,7 +165,7 @@ export class OrdersService {
 
     const allowed = VALID_STATUS_TRANSITIONS[order.status];
     if (!allowed.includes(newStatus)) {
-      throw new BadRequestException(
+      throw new ConflictException(
         `Cannot transition from "${order.status}" to "${newStatus}"`,
       );
     }

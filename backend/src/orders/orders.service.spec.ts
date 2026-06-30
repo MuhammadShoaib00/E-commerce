@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getModelToken } from '@nestjs/mongoose';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { OrdersService } from './orders.service';
 import { Order } from './schemas/order.schema';
@@ -61,14 +61,14 @@ describe('OrdersService', () => {
     await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('throws BadRequestException when stock is insufficient', async () => {
+  it('throws ConflictException (409) when stock is insufficient', async () => {
     const product = makeProduct(1, 'Widget', 1000, 2);
     const cart = { items: [makeCartItem(1, 5)] };
 
     mockCartModel.findOne.mockReturnValue(chainLean(cart));
     mockProductModel.find.mockReturnValue(chainLean([product]));
 
-    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(ConflictException);
     expect(mockProductModel.updateOne).not.toHaveBeenCalled();
   });
 
@@ -87,7 +87,7 @@ describe('OrdersService', () => {
       .mockResolvedValueOnce({ matchedCount: 0 })
       .mockResolvedValue({ matchedCount: 1 }); // rollback call
 
-    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(ConflictException);
 
     // 2 decrement attempts + 1 rollback for p1
     expect(mockProductModel.updateOne).toHaveBeenCalledTimes(3);

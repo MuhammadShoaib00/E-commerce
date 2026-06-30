@@ -30,6 +30,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
         ? exceptionResponse
         : (exceptionResponse as any)?.message ?? 'Internal server error';
 
+    // Short reason phrase, e.g. "Conflict", "Bad Request" — from the exception
+    // body when present, else derived from the status code.
+    const error =
+      (exceptionResponse as any)?.error ??
+      HttpStatus[status]
+        ?.replace(/_/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase()) ??
+      'Error';
+
     if (status >= 500) {
       this.logger.error(
         `${request.method} ${request.url} → ${status}`,
@@ -40,6 +49,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     response.status(status).json({
       statusCode: status,
       message,
+      error,
       timestamp: new Date().toISOString(),
       path: request.url,
     });

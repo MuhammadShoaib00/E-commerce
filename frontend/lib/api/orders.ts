@@ -1,9 +1,17 @@
 import { apiClient } from './client';
 import type { Order } from '@/types';
 
+export interface CheckoutPayload {
+  street?: string;
+  city?: string;
+  country?: string;
+  /** Stripe PaymentIntent id (omitted in mock mode). */
+  paymentIntentId?: string;
+}
+
 export const ordersApi = {
-  checkout: (shippingAddress?: { street?: string; city?: string; country?: string }) =>
-    apiClient.post('/orders/checkout', shippingAddress ?? {}) as unknown as Promise<Order>,
+  checkout: (payload?: CheckoutPayload) =>
+    apiClient.post('/orders/checkout', payload ?? {}) as unknown as Promise<Order>,
 
   list: () =>
     apiClient.get('/orders') as unknown as Promise<Order[]>,

@@ -147,9 +147,15 @@ To make the agentic workflow repeatable and auditable, the repo ships a
   extra ML infra, and reuses data we already store. Implementation:
   `backend/src/recommendations/`. (A content-similarity or collaborative-filtering
   approach would be the next step with more time — see §8.)
-- **Payments are mocked** (no real/Stripe integration): checkout always "succeeds"
-  and records a `paymentRef` like `mock_<ts>_<uid>`. Stock and order creation are
-  fully real around that mock so the data-integrity story holds.
+- **Payments — Stripe test mode with a mock fallback.** When `STRIPE_SECRET_KEY` /
+  `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` are set, checkout uses real Stripe **test-mode
+  PaymentIntents**: the amount is computed server-side from the cart
+  (`POST /payments/intent`), the card is collected via Stripe **Elements**, and
+  `checkout` verifies server-side that the PaymentIntent **succeeded and its amount +
+  owner match** before creating the order. With no keys it falls back to a mock
+  (`paymentRef = mock_<ts>_<uid>`) so the app runs out-of-the-box. Test card:
+  `4242 4242 4242 4242`. Payment is verified **before** stock is decremented, so a
+  failed payment moves no stock and creates no order.
 - **Product images are URLs**, not uploads — simpler, no storage/CDN dependency for
   an assessment; admins paste an image URL. Documented as a deliberate trade-off.
 - **Order-status lifecycle** is enforced as a state machine
@@ -175,7 +181,11 @@ top products); category-affinity recommendations; seed script; tests; validation
 error handling, role-based access, indexes.
 
 **Mocked / simplified (deliberate):**
-- Payment is mocked (no Stripe).
+- Stripe runs in **test mode**; with no keys it falls back to a mock. One gap left
+  for time: if the atomic stock decrement fails *after* a real charge (a tiny race
+  window, since stock is validated first), production would refund/cancel the
+  PaymentIntent — currently it rolls back stock and surfaces the error but does not
+  auto-refund.
 - Image-by-URL instead of file upload.
 - Checkout stock safety uses validate-then-atomic-`$inc`-with-rollback rather than
   a multi-document Mongo **transaction** — correct for a standalone dev MongoDB

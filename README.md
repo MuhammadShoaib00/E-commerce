@@ -17,7 +17,7 @@ shopFlow/
 
 ## Getting started
 
-### 1. Backend (API → http://localhost:4000/api)
+### 1. Backend (API → http://localhost:4001/api)
 ```bash
 cd backend
 npm install
@@ -30,7 +30,7 @@ npm run start:dev
 ```bash
 cd frontend
 npm install
-cp .env.local.example .env.local   # NEXT_PUBLIC_API_URL=http://localhost:4000/api
+cp .env.local.example .env.local   # NEXT_PUBLIC_API_URL=http://localhost:4001/api
 npm run dev
 ```
 
@@ -41,15 +41,18 @@ Open **http://localhost:3000**.
 **backend/.env**
 | Key | Example | Notes |
 |-----|---------|-------|
-| `PORT` | `4000` | API port |
+| `PORT` | `4001` | API port |
 | `MONGO_URI` | `mongodb://127.0.0.1:27017/ecommerce` | local or Atlas URI |
 | `JWT_SECRET` | `long-random-string` | JWT signing secret |
 | `FRONTEND_URL` | `http://localhost:3000` | CORS origin |
+| `STRIPE_SECRET_KEY` | `sk_test_...` | Optional — enables Stripe test payments; blank = mock |
+| `CURRENCY` | `usd` | ISO currency for charges |
 
 **frontend/.env.local**
-| Key | Example |
-|-----|---------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:4000/api` |
+| Key | Example | Notes |
+|-----|---------|-------|
+| `NEXT_PUBLIC_API_URL` | `http://localhost:4001/api` | Backend API base |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_test_...` | Optional — pair with `STRIPE_SECRET_KEY`; blank = mock |
 
 ## Seeded accounts (after `npm run seed`)
 | Role | Email | Password |
@@ -60,5 +63,5 @@ Open **http://localhost:3000**.
 
 ## Notes
 - Prices are stored as **integer cents** to avoid floating-point drift.
-- Checkout uses a **mock payment** (no real charges); stock is decremented atomically with rollback.
+- Checkout supports **Stripe test mode** (set `STRIPE_SECRET_KEY` + `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`; pay with test card `4242 4242 4242 4242`). With no keys it falls back to a **mock payment**. Either way the payment is verified before stock is decremented atomically with rollback.
 - Admin routes/endpoints are restricted to admins (server-enforced via role guards).

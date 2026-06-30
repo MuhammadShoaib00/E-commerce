@@ -15,6 +15,7 @@ import { OrdersModule } from './orders/orders.module';
 import { RecommendationsModule } from './recommendations/recommendations.module';
 import { AdminModule } from './admin/admin.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
     RecommendationsModule,
     AdminModule,
     AnalyticsModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [

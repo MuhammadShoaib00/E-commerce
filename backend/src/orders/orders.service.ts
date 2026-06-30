@@ -10,6 +10,7 @@ import { Cart, CartDocument } from '../cart/schemas/cart.schema';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
 import { OrderStatus, VALID_STATUS_TRANSITIONS } from '../common/enums/order-status.enum';
 import { CheckoutDto } from './dto/checkout.dto';
+import { PaymentsService } from '../payments/payments.service';
 
 @Injectable()
 export class OrdersService {
@@ -17,6 +18,7 @@ export class OrdersService {
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @InjectModel(Cart.name) private readonly cartModel: Model<CartDocument>,
     @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   async checkout(userId: string, dto: CheckoutDto): Promise<OrderDocument> {
@@ -50,7 +52,34 @@ export class OrdersService {
       }
     }
 
-    // 4. Atomic per-product stock decrement with rollback on race condition
+    // 4. Snapshot item details + compute total server-side (never trust client)
+    const orderItems = cart.items.map((item) => {
+      const p = productMap.get(item.productId.toString())!;
+      return {
+        productId: p._id,
+        name: p.name,
+        price: p.price,
+        quantity: item.quantity,
+      };
+    });
+    const totalAmount = orderItems.reduce(
+      (sum, i) => sum + i.price * i.quantity,
+      0,
+    );
+
+    // 5. Verify payment BEFORE touching stock. In Stripe mode this checks the
+    //    PaymentIntent succeeded and its amount matches this order's total; in
+    //    mock mode it always succeeds. Throws otherwise, so no stock is moved.
+    const paymentRef = await this.paymentsService.verifyPayment(
+      dto.paymentIntentId,
+      totalAmount,
+      userId,
+    );
+
+    // 6. Atomic per-product stock decrement with rollback on race condition.
+    //    (If this fails after a real charge, production would refund/cancel the
+    //    PaymentIntent here — see NOTES.md; the race window is tiny as stock was
+    //    just validated above.)
     const decremented: Array<{ id: string; qty: number }> = [];
     try {
       for (const item of cart.items) {
@@ -81,27 +110,7 @@ export class OrdersService {
       throw err;
     }
 
-    // 5. Snapshot item details from server-fetched products
-    const orderItems = cart.items.map((item) => {
-      const p = productMap.get(item.productId.toString())!;
-      return {
-        productId: p._id,
-        name: p.name,
-        price: p.price,
-        quantity: item.quantity,
-      };
-    });
-
-    // 6. Compute total server-side
-    const totalAmount = orderItems.reduce(
-      (sum, i) => sum + i.price * i.quantity,
-      0,
-    );
-
-    // 7. Mock payment (always succeeds)
-    const paymentRef = `mock_${Date.now()}_${userId.slice(-6)}`;
-
-    // 8. Create order after "payment" succeeds
+    // 7. Create order after payment succeeded and stock is reserved
     const order = await this.orderModel.create({
       userId: new Types.ObjectId(userId),
       items: orderItems,

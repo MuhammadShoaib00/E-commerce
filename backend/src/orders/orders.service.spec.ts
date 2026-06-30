@@ -6,6 +6,7 @@ import { OrdersService } from './orders.service';
 import { Order } from './schemas/order.schema';
 import { Cart } from '../cart/schemas/cart.schema';
 import { Product } from '../products/schemas/product.schema';
+import { PaymentsService } from '../payments/payments.service';
 
 const oid = (n: number) => new Types.ObjectId(String(n).padStart(24, '0'));
 
@@ -31,10 +32,13 @@ describe('OrdersService', () => {
   const mockOrderModel = { create: jest.fn() };
   const mockCartModel = { findOne: jest.fn(), deleteOne: jest.fn() };
   const mockProductModel = { find: jest.fn(), updateOne: jest.fn() };
+  const mockPaymentsService = { verifyPayment: jest.fn() };
 
   beforeEach(async () => {
     // resetAllMocks clears both call history AND queued return values
     jest.resetAllMocks();
+    // Default: payment verification succeeds and returns a reference.
+    mockPaymentsService.verifyPayment.mockResolvedValue('mock_ref_123');
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -42,6 +46,7 @@ describe('OrdersService', () => {
         { provide: getModelToken(Order.name), useValue: mockOrderModel },
         { provide: getModelToken(Cart.name), useValue: mockCartModel },
         { provide: getModelToken(Product.name), useValue: mockProductModel },
+        { provide: PaymentsService, useValue: mockPaymentsService },
       ],
     }).compile();
 
@@ -121,5 +126,35 @@ describe('OrdersService', () => {
 
     expect(mockOrderModel.create).toHaveBeenCalledTimes(1);
     expect(mockCartModel.deleteOne).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects checkout and touches no stock when payment verification fails', async () => {
+    const product = makeProduct(1, 'Gadget', 999, 5);
+    const cart = { items: [makeCartItem(1, 1)] };
+
+    mockCartModel.findOne.mockReturnValue(chainLean(cart));
+    mockProductModel.find.mockReturnValue(chainLean([product]));
+    mockPaymentsService.verifyPayment.mockRejectedValueOnce(
+      new BadRequestException('Payment not completed'),
+    );
+
+    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
+    expect(mockProductModel.updateOne).not.toHaveBeenCalled();
+    expect(mockOrderModel.create).not.toHaveBeenCalled();
+  });
+
+  it('verifies payment with the server-computed total and the supplied paymentIntentId', async () => {
+    const product = makeProduct(1, 'Gizmo', 1500, 10);
+    const cart = { items: [makeCartItem(1, 2)] };
+
+    mockCartModel.findOne.mockReturnValue(chainLean(cart));
+    mockProductModel.find.mockReturnValue(chainLean([product]));
+    mockProductModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+    mockOrderModel.create.mockResolvedValue({ _id: new Types.ObjectId() });
+    mockCartModel.deleteOne.mockResolvedValue({});
+
+    await service.checkout(userId, { ...dto, paymentIntentId: 'pi_test_123' });
+
+    expect(mockPaymentsService.verifyPayment).toHaveBeenCalledWith('pi_test_123', 3000, userId);
   });
 });

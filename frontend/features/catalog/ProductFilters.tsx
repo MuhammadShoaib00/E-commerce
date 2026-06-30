@@ -23,28 +23,26 @@ export function ProductFilters({ filters, categories, onChange }: ProductFilters
     onChange({ sort: filters.sort, page: 1, limit: filters.limit });
 
   return (
-    <div className="bg-white rounded-2xl border border-neutral-200 p-5">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-neutral-800">Filters</h2>
         {hasActiveFilters && (
-          <Button variant="ghost" size="sm" onClick={reset} leftIcon={<X className="w-3 h-3" />}>
+          <Button variant="ghost" size="sm" onClick={reset} leftIcon={<X className="h-3 w-3" />}>
             Clear
           </Button>
         )}
       </div>
 
       <div className="flex flex-col gap-4">
-        {/* Search */}
         <Input
-          placeholder="Search products…"
+          placeholder="Search products..."
           value={filters.search ?? ''}
           onChange={(e) => update({ search: e.target.value || undefined })}
-          leftIcon={<Search className="w-4 h-4" />}
+          leftIcon={<Search className="h-4 w-4" />}
         />
 
-        {/* Category */}
         <div>
-          <label className="block text-xs font-medium text-neutral-500 uppercase tracking-wide mb-1.5">
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-neutral-500">
             Category
           </label>
           <Select
@@ -60,9 +58,8 @@ export function ProductFilters({ filters, categories, onChange }: ProductFilters
           </Select>
         </div>
 
-        {/* Price range */}
         <div>
-          <label className="block text-xs font-medium text-neutral-500 uppercase tracking-wide mb-1.5">
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-neutral-500">
             Price range
           </label>
           <div className="flex items-center gap-2">
@@ -76,7 +73,7 @@ export function ProductFilters({ filters, categories, onChange }: ProductFilters
               }
               className="w-full"
             />
-            <span className="text-neutral-400 shrink-0">–</span>
+            <span className="shrink-0 text-neutral-400">-</span>
             <Input
               type="number"
               placeholder="Max"
@@ -90,9 +87,8 @@ export function ProductFilters({ filters, categories, onChange }: ProductFilters
           </div>
         </div>
 
-        {/* Sort */}
         <div>
-          <label className="block text-xs font-medium text-neutral-500 uppercase tracking-wide mb-1.5">
+          <label className="mb-1.5 block text-xs font-medium uppercase tracking-wide text-neutral-500">
             Sort by
           </label>
           <Select
@@ -100,9 +96,9 @@ export function ProductFilters({ filters, categories, onChange }: ProductFilters
             onChange={(e) => update({ sort: e.target.value as ProductQueryParams['sort'] })}
           >
             <option value="newest">Newest</option>
-            <option value="price_asc">Price: Low → High</option>
-            <option value="price_desc">Price: High → Low</option>
-            <option value="name">Name A–Z</option>
+            <option value="price_asc">Price: Low to High</option>
+            <option value="price_desc">Price: High to Low</option>
+            <option value="name">Name A-Z</option>
           </Select>
         </div>
       </div>

@@ -29,7 +29,6 @@ function AuthContent() {
   return (
     <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center px-4 py-12">
       <div className="grid w-full max-w-4xl overflow-hidden rounded-3xl border border-neutral-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.12)] md:grid-cols-2">
-        {/* Brand panel */}
         <aside className="relative hidden flex-col justify-between bg-gradient-to-br from-primary-600 via-primary-700 to-primary-800 p-10 text-white md:flex">
           <div className="flex items-center gap-2 text-2xl font-black uppercase tracking-tight">
             <Package className="h-7 w-7" />
@@ -40,20 +39,18 @@ function AuthContent() {
               {mode === 'login' ? 'Welcome back.' : 'Join ShopFlow.'}
             </h2>
             <p className="text-sm text-primary-100">
-              Your cart, orders, and personalised picks — all in one place.
+              Your cart, orders, and personalised picks - all in one place.
             </p>
             <ul className="space-y-3 text-sm">
               <Feature icon={<Truck className="h-4 w-4" />} text="Fast delivery on every order" />
-              <Feature icon={<ShieldCheck className="h-4 w-4" />} text="Secure checkout & saved orders" />
+              <Feature icon={<ShieldCheck className="h-4 w-4" />} text="Secure checkout and saved orders" />
               <Feature icon={<Sparkles className="h-4 w-4" />} text="Recommendations picked for you" />
             </ul>
           </div>
-          <p className="text-xs text-primary-200/80">© ShopFlow — a demo storefront.</p>
+          <p className="text-xs text-primary-200/80">ShopFlow commerce dashboard.</p>
         </aside>
 
-        {/* Form panel */}
         <div className="p-8 sm:p-10">
-          {/* Segmented toggle */}
           <div className="mb-8 flex rounded-full bg-neutral-100 p-1 text-sm font-bold">
             <button
               onClick={() => setMode('login')}
@@ -69,16 +66,11 @@ function AuthContent() {
             </button>
           </div>
 
-          {/* Re-mount the form on mode change so the right schema/fields apply */}
           <AuthForm key={mode} mode={mode} redirect={redirect} />
 
-          {mode === 'login' && (
-            <div className="mt-6 space-y-1 rounded-xl bg-neutral-50 p-4 text-xs text-neutral-500">
-              <p className="mb-2 font-semibold text-neutral-700">Seeded test accounts</p>
-              <p>Admin: admin@shop.com / Admin@123</p>
-              <p>Customer: customer@shop.com / Customer@123</p>
-            </div>
-          )}
+          <p className="mt-6 text-center text-xs leading-5 text-neutral-500">
+            Secure access for your saved cart, checkout, and order history.
+          </p>
         </div>
       </div>
     </div>
@@ -176,7 +168,7 @@ function AuthForm({ mode, redirect }: { mode: Mode; redirect: string }) {
         label="Password"
         type="password"
         autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-        placeholder={mode === 'login' ? '••••••••' : 'Min. 8 chars, 1 uppercase, 1 number'}
+        placeholder={mode === 'login' ? 'Password' : 'Min. 8 chars, 1 uppercase, 1 number'}
         error={errors.password?.message}
         {...register('password')}
       />

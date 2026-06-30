@@ -188,14 +188,19 @@ function StripePaymentForm({
   const elements = useElements();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
+  const [ready, setReady] = useState(false);
 
   const handlePay = async () => {
+    // Don't confirm until the card field has actually mounted.
+    if (!stripe || !elements || !ready) {
+      toast('Payment form is still loading — please wait a moment', 'error');
+      return;
+    }
     // Validate shipping first so we don't charge before we have an address.
     if (!(await trigger())) {
       toast('Please complete your shipping address', 'error');
       return;
     }
-    if (!stripe || !elements) return;
 
     setSubmitting(true);
     try {
@@ -222,12 +227,27 @@ function StripePaymentForm({
 
   return (
     <div className="flex flex-col gap-4">
-      <PaymentElement />
+      <PaymentElement
+        onReady={() => setReady(true)}
+        onLoadError={(e) =>
+          toast(
+            e.error?.message ??
+              'Could not load the payment form. Check that your Stripe publishable key matches the secret key.',
+            'error',
+          )
+        }
+      />
       <div className="flex items-center gap-2 text-xs text-neutral-400">
         <Lock className="h-3.5 w-3.5" /> Test mode — use card 4242 4242 4242 4242, any future date & CVC.
       </div>
-      <Button onClick={handlePay} size="lg" className="w-full" isLoading={submitting || isPlacing} disabled={!stripe}>
-        Pay {formatCurrency(total)}
+      <Button
+        onClick={handlePay}
+        size="lg"
+        className="w-full"
+        isLoading={submitting || isPlacing}
+        disabled={!stripe || !ready}
+      >
+        {ready ? `Pay ${formatCurrency(total)}` : 'Loading payment…'}
       </Button>
     </div>
   );

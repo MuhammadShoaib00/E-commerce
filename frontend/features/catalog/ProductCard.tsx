@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Heart, ShoppingCart, Star } from 'lucide-react';
+import { Heart, ShoppingCart } from 'lucide-react';
 import { useCart } from '@/features/cart/hooks/useCart';
 import { useToast } from '@/components/ui/Toast';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
@@ -32,20 +32,20 @@ export function ProductCard({ product }: ProductCardProps) {
   };
 
   const outOfStock = product.stockQuantity === 0;
+  const lowStock = product.stockQuantity > 0 && product.stockQuantity <= 5;
 
   return (
-    <div className="group relative flex flex-col overflow-hidden rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-primary-200 hover:shadow-[0_22px_50px_rgba(15,23,42,0.12)]">
-      <button className="absolute right-5 top-5 z-10 grid h-9 w-9 place-items-center rounded-full bg-white text-neutral-500 shadow-sm transition hover:text-primary-600" aria-label={`Save ${product.name}`}>
-        <Heart className="h-5 w-5" />
-      </button>
-
-      <Link href={`/products/${product._id}`} className="relative mb-4 block aspect-[4/3] overflow-hidden rounded-xl bg-white">
+    <div className="group relative flex flex-col overflow-hidden rounded-[var(--radius-2xl)] border border-neutral-200/70 bg-white p-3 shadow-[var(--shadow-card)] transition duration-500 hover:-translate-y-1.5 hover:shadow-[var(--shadow-elevated)]">
+      <Link
+        href={`/products/${product._id}`}
+        className="relative mb-4 block aspect-square overflow-hidden rounded-[calc(var(--radius-2xl)-0.5rem)] bg-neutral-50"
+      >
         {product.imageUrl ? (
           <Image
             src={product.imageUrl}
             alt={product.name}
             fill
-            className="object-contain transition-transform duration-500 group-hover:scale-105"
+            className="object-cover transition-transform duration-700 ease-out group-hover:scale-[1.07]"
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
           />
         ) : (
@@ -55,40 +55,56 @@ export function ProductCard({ product }: ProductCardProps) {
             </svg>
           </div>
         )}
+
+        {/* Wishlist */}
+        <span className="absolute right-3 top-3 grid h-9 w-9 place-items-center rounded-full bg-white/85 text-neutral-500 opacity-0 shadow-sm backdrop-blur transition duration-300 hover:text-primary-600 group-hover:opacity-100">
+          <Heart className="h-[18px] w-[18px]" />
+        </span>
+
+        {lowStock && (
+          <span className="absolute left-3 top-3 rounded-full bg-[var(--color-accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--color-accent)]">
+            Only {product.stockQuantity} left
+          </span>
+        )}
         {outOfStock && (
-          <div className="absolute inset-0 flex items-center justify-center bg-white/60">
+          <div className="absolute inset-0 flex items-center justify-center bg-white/70 backdrop-blur-[1px]">
             <Badge variant="danger">Out of Stock</Badge>
           </div>
         )}
       </Link>
 
-      <div className="flex flex-1 flex-col gap-2">
-        {product.category && <Badge variant="neutral">{product.category.name}</Badge>}
+      <div className="flex flex-1 flex-col gap-1.5 px-2 pb-2">
+        {product.category && (
+          <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-400">
+            {product.category.name}
+          </span>
+        )}
         <Link href={`/products/${product._id}`}>
-          <h3 className="line-clamp-2 text-sm font-extrabold text-neutral-950 transition-colors hover:text-primary-600">
+          <h3 className="line-clamp-2 text-[15px] font-semibold leading-snug text-neutral-900 transition-colors group-hover:text-primary-700">
             {product.name}
           </h3>
         </Link>
-        <p className="flex items-center gap-1 text-sm text-neutral-500">
-          <Star className="h-4 w-4 fill-primary-600 text-primary-600" />
-          Premium pick
-        </p>
-        <div className="mt-auto flex items-center justify-between pt-2">
-          <span className="text-lg font-black text-neutral-950">
+
+        <div className="mt-auto flex items-center justify-between pt-3">
+          <span className="font-display text-xl font-semibold text-neutral-900">
             {formatCurrency(product.price)}
           </span>
           <button
             onClick={handleAdd}
             disabled={outOfStock || adding}
-            className="grid h-11 w-11 place-items-center rounded-full bg-primary-600 text-white shadow-[0_12px_25px_rgba(0,101,255,0.28)] transition hover:-translate-y-0.5 hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-10 items-center gap-1.5 rounded-full bg-neutral-900 px-4 text-sm font-semibold text-white transition duration-300 hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-40"
             aria-label={`Add ${product.name} to cart`}
           >
-            {adding ? <span className="text-xs font-bold">...</span> : <ShoppingCart className="h-5 w-5" />}
+            {adding ? (
+              <span className="text-xs font-bold">···</span>
+            ) : (
+              <>
+                <ShoppingCart className="h-4 w-4" />
+                <span className="hidden sm:inline">Add</span>
+              </>
+            )}
           </button>
         </div>
-        {product.stockQuantity > 0 && product.stockQuantity <= 5 && (
-          <p className="text-xs font-medium text-warning">Only {product.stockQuantity} left</p>
-        )}
       </div>
     </div>
   );

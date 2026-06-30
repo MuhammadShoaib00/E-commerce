@@ -25,17 +25,25 @@
   --color-success: var(--color-success);
   --color-warning: var(--color-warning);
   --color-danger: var(--color-danger);
+  --color-accent: var(--color-accent);
+  --color-accent-soft: var(--color-accent-soft);
 
   --radius-sm: var(--radius-sm);
   --radius-md: var(--radius-md);
   --radius-lg: var(--radius-lg);
   --radius-xl: var(--radius-xl);
+  --radius-2xl: var(--radius-2xl);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-elevated: var(--shadow-elevated);
 
   --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
 }
 
 :root {
-  --background: #ffffff;
+  /* Warm off-white canvas for a premium, gallery-like feel */
+  --background: #f7f5f1;
   --foreground: var(--color-neutral-900);
 }
 
@@ -44,6 +52,26 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Display serif for headings — apply via the .font-display utility */
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.015em;
+}
+
+/* Premium serif on page titles & section headers by default (h3+ stay sans for
+   legibility on dense UI like product names). Opt out with .font-sans. */
+h1,
+h2 {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+}
+
+::selection {
+  background: var(--color-primary-600);
+  color: #fff;
 }
 
 @keyframes shopflow-float {

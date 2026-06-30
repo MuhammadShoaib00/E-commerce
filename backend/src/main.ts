@@ -1,12 +1,17 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Secure HTTP headers. crossOriginResourcePolicy is relaxed so the SPA on a
+  // different origin can still read JSON responses.
+  app.use(helmet({ crossOriginResourcePolicy: false }));
 
   app.setGlobalPrefix('api');
 

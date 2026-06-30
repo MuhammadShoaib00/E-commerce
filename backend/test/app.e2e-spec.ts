@@ -16,7 +16,7 @@ describe('Auth & Products (e2e)', () => {
   beforeAll(async () => {
     mongod = await MongoMemoryServer.create();
     process.env.MONGO_URI = mongod.getUri();
-    process.env.JWT_SECRET = 'e2e-test-secret';
+    process.env.JWT_SECRET = 'e2e-test-secret-key-0123456789';
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],

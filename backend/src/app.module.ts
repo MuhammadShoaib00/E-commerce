@@ -2,8 +2,10 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import configuration from './config/configuration';
+import { validateEnv } from './config/env.validation';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { RolesGuard } from './common/guards/roles.guard';
 import { AuthModule } from './auth/auth.module';
@@ -19,7 +21,9 @@ import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
+    ConfigModule.forRoot({ isGlobal: true, load: [configuration], validate: validateEnv }),
+    // Global rate limit (100 req/min per IP); auth routes tighten this further.
+    ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
     MongooseModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -40,6 +44,8 @@ import { PaymentsModule } from './payments/payments.module';
   ],
   controllers: [AppController],
   providers: [
+    // Rate limiter runs first so abusive traffic is throttled before auth work.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
   ],

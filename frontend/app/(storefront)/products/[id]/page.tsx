@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { formatCurrency } from '@/lib/utils/formatCurrency';
 import { ProductMedia } from '@/features/catalog/ProductMedia';
+import { RelatedProducts } from '@/features/catalog/RelatedProducts';
 
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -143,6 +144,8 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
           </div>
         </div>
       </div>
+
+      <RelatedProducts productId={id} />
     </div>
   );
 }

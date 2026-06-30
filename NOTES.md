@@ -146,7 +146,10 @@ To make the agentic workflow repeatable and auditable, the repo ships a
   personalised when we have signal, degrades gracefully when we don't, needs no
   extra ML infra, and reuses data we already store. Implementation:
   `backend/src/recommendations/`. (A content-similarity or collaborative-filtering
-  approach would be the next step with more time — see §8.)
+  approach would be the next step with more time — see §8.) In addition, the
+  **product detail page** shows a content-based **"related products"** baseline
+  (same category, in stock, newest first — `GET /products/:id/related`): cheap,
+  deterministic, and free of any cold-start problem.
 - **Payments — Stripe test mode with a mock fallback.** When `STRIPE_SECRET_KEY` /
   `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` are set, checkout uses real Stripe **test-mode
   PaymentIntents**: the amount is computed server-side from the cart

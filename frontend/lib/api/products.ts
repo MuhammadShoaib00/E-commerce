@@ -7,4 +7,7 @@ export const productsApi = {
 
   getById: (id: string) =>
     apiClient.get(`/products/${id}`) as unknown as Promise<Product>,
+
+  getRelated: (id: string) =>
+    apiClient.get(`/products/${id}/related`) as unknown as Promise<Product[]>,
 };

@@ -20,4 +20,9 @@ export class ProductsController {
   findOne(@Param('id', ParseObjectIdPipe) id: string) {
     return this.productsService.findById(id);
   }
+
+  @Get(':id/related')
+  findRelated(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.productsService.findRelated(id);
+  }
 }

@@ -82,6 +82,30 @@ export class ProductsService {
     return product;
   }
 
+  /**
+   * Content-based "related products": same category, excluding the current item,
+   * in stock, newest first. Falls back to other newest in-stock products when the
+   * item has no category. Deterministic, no cold-start. (See NOTES.md §9.)
+   */
+  async findRelated(id: string, limit = 4): Promise<any[]> {
+    const product = await this.productModel.findById(id).lean().exec();
+    if (!product) throw new NotFoundException('Product not found');
+
+    const filter: FilterQuery<Product> = {
+      _id: { $ne: product._id },
+      stockQuantity: { $gt: 0 },
+    };
+    if (product.category) filter.category = product.category;
+
+    return this.productModel
+      .find(filter)
+      .populate('category', 'name slug')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean()
+      .exec();
+  }
+
   async create(dto: CreateProductDto): Promise<ProductDocument> {
     return this.productModel.create(dto);
   }

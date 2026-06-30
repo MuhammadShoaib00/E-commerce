@@ -4,21 +4,42 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
+import { InjectConnection, InjectModel } from '@nestjs/mongoose';
+import { ClientSession, Connection, Model, Types } from 'mongoose';
 import { Order, OrderDocument } from './schemas/order.schema';
 import { Cart, CartDocument } from '../cart/schemas/cart.schema';
 import { Product, ProductDocument } from '../products/schemas/product.schema';
-import { OrderStatus, VALID_STATUS_TRANSITIONS } from '../common/enums/order-status.enum';
+import {
+  OrderStatus,
+  VALID_STATUS_TRANSITIONS,
+} from '../common/enums/order-status.enum';
 import { CheckoutDto } from './dto/checkout.dto';
 import { PaymentsService } from '../payments/payments.service';
+
+interface MutationCtx {
+  userId: string;
+  items: Array<{ productId: Types.ObjectId; quantity: number }>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  productMap: Map<string, any>;
+  orderItems: Array<{
+    productId: Types.ObjectId;
+    name: string;
+    price: number;
+    quantity: number;
+  }>;
+  totalAmount: number;
+  paymentRef: string;
+  dto: CheckoutDto;
+}
 
 @Injectable()
 export class OrdersService {
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     @InjectModel(Cart.name) private readonly cartModel: Model<CartDocument>,
-    @InjectModel(Product.name) private readonly productModel: Model<ProductDocument>,
+    @InjectModel(Product.name)
+    private readonly productModel: Model<ProductDocument>,
+    @InjectConnection() private readonly connection: Connection,
     private readonly paymentsService: PaymentsService,
   ) {}
 
@@ -77,63 +98,137 @@ export class OrdersService {
       userId,
     );
 
-    // 6. Reserve stock (conditional atomic decrement) and create the order. If
-    //    anything fails AFTER payment, roll the stock back AND refund the charge,
-    //    so we never keep money for an order that wasn't created.
-    const decremented: Array<{ id: string; qty: number }> = [];
+    // 6. Reserve stock, create the order, and clear the cart. Prefer a single
+    //    MongoDB transaction (atomic across documents). On deployments without
+    //    transaction support (e.g. a standalone dev Mongo) fall back to a manual
+    //    conditional-update + rollback path. Either way, refund on any
+    //    post-payment failure so money is never kept without an order.
+    const ctx: MutationCtx = {
+      userId,
+      items: cart.items,
+      productMap,
+      orderItems,
+      totalAmount,
+      paymentRef,
+      dto,
+    };
+
     let order: OrderDocument;
     try {
-      for (const item of cart.items) {
-        const product = productMap.get(item.productId.toString())!;
-        const result = await this.productModel.updateOne(
-          { _id: product._id, stockQuantity: { $gte: item.quantity } },
-          { $inc: { stockQuantity: -item.quantity } },
-        );
-        if (result.matchedCount === 0) {
-          throw new ConflictException(
-            `"${product.name}" is no longer available in the requested quantity`,
+      order = await this.withCheckoutTransaction((session) =>
+        this.runCheckoutMutations(ctx, session, []),
+      );
+    } catch (err) {
+      if (!this.isTransactionUnsupported(err)) {
+        await this.paymentsService.refundPayment(paymentRef);
+        throw err;
+      }
+      // --- Fallback: no transactions available. Track decrements and undo them
+      //     manually if a later step fails, then refund. ---
+      const decremented: Array<{ id: string; qty: number }> = [];
+      try {
+        order = await this.runCheckoutMutations(ctx, null, decremented);
+      } catch (innerErr) {
+        if (decremented.length) {
+          await Promise.all(
+            decremented.map(({ id, qty }) =>
+              this.productModel.updateOne(
+                { _id: new Types.ObjectId(id) },
+                { $inc: { stockQuantity: qty } },
+              ),
+            ),
           );
         }
-        decremented.push({ id: product._id.toString(), qty: item.quantity });
+        await this.paymentsService.refundPayment(paymentRef);
+        throw innerErr;
       }
-
-      order = await this.orderModel.create({
-        userId: new Types.ObjectId(userId),
-        items: orderItems,
-        totalAmount,
-        status: OrderStatus.PENDING,
-        paymentRef,
-        shippingAddress: {
-          street: dto.street,
-          city: dto.city,
-          country: dto.country,
-        },
-      });
-    } catch (err) {
-      // Roll back any stock we decremented.
-      if (decremented.length > 0) {
-        await Promise.all(
-          decremented.map(({ id, qty }) =>
-            this.productModel.updateOne(
-              { _id: new Types.ObjectId(id) },
-              { $inc: { stockQuantity: qty } },
-            ),
-          ),
-        );
-      }
-      // Refund the charge (no-op in mock mode) so money isn't kept without an order.
-      await this.paymentsService.refundPayment(paymentRef);
-      throw err;
     }
-
-    // 7. Clear the cart — best-effort, so a failed delete can't undo a valid order.
-    await this.cartModel
-      .deleteOne({ userId: new Types.ObjectId(userId) })
-      .catch(() => undefined);
 
     return order;
   }
 
+  /**
+   * The core checkout writes — conditional stock decrement, order creation, cart
+   * clear — usable with or without a session. When `session` is null the caller
+   * is responsible for manual rollback (it tracks decrements via `decremented`).
+   */
+  private async runCheckoutMutations(
+    ctx: MutationCtx,
+    session: ClientSession | null,
+    decremented: Array<{ id: string; qty: number }>,
+  ): Promise<OrderDocument> {
+    const opts = session ? { session } : {};
+    for (const item of ctx.items) {
+      const product = ctx.productMap.get(item.productId.toString())!;
+      const result = await this.productModel.updateOne(
+        { _id: product._id, stockQuantity: { $gte: item.quantity } },
+        { $inc: { stockQuantity: -item.quantity } },
+        opts,
+      );
+      if (result.matchedCount === 0) {
+        throw new ConflictException(
+          `"${product.name}" is no longer available in the requested quantity`,
+        );
+      }
+      decremented.push({ id: product._id.toString(), qty: item.quantity });
+    }
+
+    const [createdOrder] = await this.orderModel.create(
+      [
+        {
+          userId: new Types.ObjectId(ctx.userId),
+          items: ctx.orderItems,
+          totalAmount: ctx.totalAmount,
+          status: OrderStatus.PENDING,
+          paymentRef: ctx.paymentRef,
+          shippingAddress: {
+            street: ctx.dto.street,
+            city: ctx.dto.city,
+            country: ctx.dto.country,
+          },
+        },
+      ],
+      opts,
+    );
+
+    await this.cartModel.deleteOne({ userId: new Types.ObjectId(ctx.userId) }, opts);
+    return createdOrder;
+  }
+
+  private async withCheckoutTransaction<T>(
+    work: (session: ClientSession) => Promise<T>,
+  ): Promise<T> {
+    const session = await this.connection.startSession();
+    try {
+      let result: T | undefined;
+      await session.withTransaction(
+        async () => {
+          result = await work(session);
+        },
+        {
+          readConcern: { level: 'snapshot' },
+          writeConcern: { w: 'majority' },
+        },
+      );
+      return result as T;
+    } finally {
+      await session.endSession();
+    }
+  }
+
+  /** True for the "transactions need a replica set / mongos" class of errors. */
+  private isTransactionUnsupported(err: unknown): boolean {
+    const e = err as { code?: number; codeName?: string; message?: string };
+    const msg = e?.message ?? '';
+    return (
+      e?.code === 20 ||
+      e?.code === 263 ||
+      e?.codeName === 'IllegalOperation' ||
+      /Transaction numbers are only allowed on a replica set|Transactions are not supported|replica set member or mongos/i.test(
+        msg,
+      )
+    );
+  }
   async findAllForUser(userId: string): Promise<any[]> {
     return this.orderModel
       .find({ userId: new Types.ObjectId(userId) })
@@ -162,7 +257,10 @@ export class OrdersService {
       .exec();
   }
 
-  async updateStatus(orderId: string, newStatus: OrderStatus): Promise<OrderDocument> {
+  async updateStatus(
+    orderId: string,
+    newStatus: OrderStatus,
+  ): Promise<OrderDocument> {
     const order = await this.orderModel.findById(orderId).exec();
     if (!order) throw new NotFoundException('Order not found');
 

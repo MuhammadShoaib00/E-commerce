@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getModelToken } from '@nestjs/mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { OrdersService } from './orders.service';
@@ -10,7 +10,12 @@ import { PaymentsService } from '../payments/payments.service';
 
 const oid = (n: number) => new Types.ObjectId(String(n).padStart(24, '0'));
 
-const makeProduct = (n: number, name: string, price: number, stock: number) => ({
+const makeProduct = (
+  n: number,
+  name: string,
+  price: number,
+  stock: number,
+) => ({
   _id: oid(n),
   name,
   price,
@@ -32,7 +37,12 @@ describe('OrdersService', () => {
   const mockOrderModel = { create: jest.fn() };
   const mockCartModel = { findOne: jest.fn(), deleteOne: jest.fn() };
   const mockProductModel = { find: jest.fn(), updateOne: jest.fn() };
-  const mockPaymentsService = { verifyPayment: jest.fn(), refundPayment: jest.fn() };
+  const mockPaymentsService = {
+    verifyPayment: jest.fn(),
+    refundPayment: jest.fn(),
+  };
+  const mockSession = { withTransaction: jest.fn(), endSession: jest.fn() };
+  const mockConnection = { startSession: jest.fn() };
 
   beforeEach(async () => {
     // resetAllMocks clears both call history AND queued return values
@@ -40,6 +50,11 @@ describe('OrdersService', () => {
     // Default: payment verification succeeds and returns a reference.
     mockPaymentsService.verifyPayment.mockResolvedValue('mock_ref_123');
     mockPaymentsService.refundPayment.mockResolvedValue(undefined);
+    mockSession.withTransaction.mockImplementation(
+      async (work: () => Promise<unknown>) => work(),
+    );
+    mockSession.endSession.mockResolvedValue(undefined);
+    mockConnection.startSession.mockResolvedValue(mockSession);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -47,6 +62,7 @@ describe('OrdersService', () => {
         { provide: getModelToken(Order.name), useValue: mockOrderModel },
         { provide: getModelToken(Cart.name), useValue: mockCartModel },
         { provide: getModelToken(Product.name), useValue: mockProductModel },
+        { provide: getConnectionToken(), useValue: mockConnection },
         { provide: PaymentsService, useValue: mockPaymentsService },
       ],
     }).compile();
@@ -59,7 +75,9 @@ describe('OrdersService', () => {
 
   it('throws BadRequestException when cart is empty', async () => {
     mockCartModel.findOne.mockReturnValue(chainLean(null));
-    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('throws ConflictException (409) when stock is insufficient', async () => {
@@ -69,11 +87,13 @@ describe('OrdersService', () => {
     mockCartModel.findOne.mockReturnValue(chainLean(cart));
     mockProductModel.find.mockReturnValue(chainLean([product]));
 
-    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
     expect(mockProductModel.updateOne).not.toHaveBeenCalled();
   });
 
-  it('rolls back decremented items when a later atomic decrement fails (race condition)', async () => {
+  it('aborts the transaction and refunds when a later atomic decrement fails (race condition)', async () => {
     // Both products have sufficient stock to pass initial validation
     const p1 = makeProduct(1, 'Alpha', 500, 10);
     const p2 = makeProduct(2, 'Beta', 500, 10);
@@ -85,15 +105,20 @@ describe('OrdersService', () => {
     // First decrement succeeds, second fails (race condition)
     mockProductModel.updateOne
       .mockResolvedValueOnce({ matchedCount: 1 })
-      .mockResolvedValueOnce({ matchedCount: 0 })
-      .mockResolvedValue({ matchedCount: 1 }); // rollback call
+      .mockResolvedValueOnce({ matchedCount: 0 });
 
-    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(
+      ConflictException,
+    );
 
-    // 2 decrement attempts + 1 rollback for p1
-    expect(mockProductModel.updateOne).toHaveBeenCalledTimes(3);
-    const rollbackCall = mockProductModel.updateOne.mock.calls[2];
-    expect(rollbackCall[1]).toEqual({ $inc: { stockQuantity: 2 } });
+    // 2 decrement attempts; Mongo aborts the transaction, so no manual rollback write is needed.
+    expect(mockProductModel.updateOne).toHaveBeenCalledTimes(2);
+    expect(mockProductModel.updateOne.mock.calls[0][2]).toEqual({
+      session: mockSession,
+    });
+    expect(mockPaymentsService.refundPayment).toHaveBeenCalledWith(
+      'mock_ref_123',
+    );
   });
 
   it('computes totalAmount from server-fetched product prices (not cart)', async () => {
@@ -103,13 +128,14 @@ describe('OrdersService', () => {
     mockCartModel.findOne.mockReturnValue(chainLean(cart));
     mockProductModel.find.mockReturnValue(chainLean([product]));
     mockProductModel.updateOne.mockResolvedValue({ matchedCount: 1 });
-    mockOrderModel.create.mockResolvedValue({ _id: new Types.ObjectId() });
+    mockOrderModel.create.mockResolvedValue([{ _id: new Types.ObjectId() }]);
     mockCartModel.deleteOne.mockResolvedValue({});
 
     await service.checkout(userId, dto);
 
     expect(mockOrderModel.create).toHaveBeenCalledWith(
-      expect.objectContaining({ totalAmount: 4500 }), // 1500 × 3
+      [expect.objectContaining({ totalAmount: 4500 })], // 1500 x 3
+      { session: mockSession },
     );
   });
 
@@ -120,13 +146,16 @@ describe('OrdersService', () => {
     mockCartModel.findOne.mockReturnValue(chainLean(cart));
     mockProductModel.find.mockReturnValue(chainLean([product]));
     mockProductModel.updateOne.mockResolvedValue({ matchedCount: 1 });
-    mockOrderModel.create.mockResolvedValue({ _id: new Types.ObjectId() });
+    mockOrderModel.create.mockResolvedValue([{ _id: new Types.ObjectId() }]);
     mockCartModel.deleteOne.mockResolvedValue({});
 
     await service.checkout(userId, dto);
 
     expect(mockOrderModel.create).toHaveBeenCalledTimes(1);
     expect(mockCartModel.deleteOne).toHaveBeenCalledTimes(1);
+    expect(mockCartModel.deleteOne.mock.calls[0][1]).toEqual({
+      session: mockSession,
+    });
   });
 
   it('rejects checkout and touches no stock when payment verification fails', async () => {
@@ -139,7 +168,9 @@ describe('OrdersService', () => {
       new BadRequestException('Payment not completed'),
     );
 
-    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.checkout(userId, dto)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
     expect(mockProductModel.updateOne).not.toHaveBeenCalled();
     expect(mockOrderModel.create).not.toHaveBeenCalled();
   });
@@ -151,15 +182,19 @@ describe('OrdersService', () => {
     mockCartModel.findOne.mockReturnValue(chainLean(cart));
     mockProductModel.find.mockReturnValue(chainLean([product]));
     mockProductModel.updateOne.mockResolvedValue({ matchedCount: 1 });
-    mockOrderModel.create.mockResolvedValue({ _id: new Types.ObjectId() });
+    mockOrderModel.create.mockResolvedValue([{ _id: new Types.ObjectId() }]);
     mockCartModel.deleteOne.mockResolvedValue({});
 
     await service.checkout(userId, { ...dto, paymentIntentId: 'pi_test_123' });
 
-    expect(mockPaymentsService.verifyPayment).toHaveBeenCalledWith('pi_test_123', 3000, userId);
+    expect(mockPaymentsService.verifyPayment).toHaveBeenCalledWith(
+      'pi_test_123',
+      3000,
+      userId,
+    );
   });
 
-  it('rolls back stock and refunds the charge if order creation fails after payment', async () => {
+  it('aborts the transaction and refunds the charge if order creation fails after payment', async () => {
     const product = makeProduct(1, 'Gizmo', 1500, 10);
     const cart = { items: [makeCartItem(1, 2)] };
 
@@ -171,10 +206,42 @@ describe('OrdersService', () => {
 
     await expect(service.checkout(userId, dto)).rejects.toThrow('db down');
 
-    // 1 decrement + 1 rollback
-    expect(mockProductModel.updateOne).toHaveBeenCalledTimes(2);
-    expect(mockProductModel.updateOne.mock.calls[1][1]).toEqual({ $inc: { stockQuantity: 2 } });
+    // The transaction aborts the decrement; no compensating stock write is needed.
+    expect(mockProductModel.updateOne).toHaveBeenCalledTimes(1);
+    expect(mockProductModel.updateOne.mock.calls[0][2]).toEqual({
+      session: mockSession,
+    });
     // charge refunded
     expect(mockPaymentsService.refundPayment).toHaveBeenCalledWith('pi_live_1');
+  });
+
+  it('falls back to the manual path when transactions are unsupported (standalone Mongo)', async () => {
+    const product = makeProduct(1, 'Gizmo', 1500, 2);
+    const cart = { items: [makeCartItem(1, 2)] };
+
+    mockCartModel.findOne.mockReturnValue(chainLean(cart));
+    mockProductModel.find.mockReturnValue(chainLean([product]));
+    mockProductModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+    mockOrderModel.create.mockResolvedValue([{ _id: new Types.ObjectId() }]);
+    mockCartModel.deleteOne.mockResolvedValue({});
+    // Simulate a standalone deployment: the transaction is rejected as unsupported.
+    mockSession.withTransaction.mockReset();
+    mockSession.withTransaction.mockRejectedValueOnce(
+      Object.assign(
+        new Error('Transaction numbers are only allowed on a replica set member or mongos'),
+        { code: 20 },
+      ),
+    );
+
+    const order = await service.checkout(userId, dto);
+
+    expect(order).toBeDefined();
+    // The fallback runs WITHOUT a session.
+    expect(mockOrderModel.create).toHaveBeenCalledWith(
+      [expect.objectContaining({ totalAmount: 3000 })],
+      {},
+    );
+    expect(mockProductModel.updateOne.mock.calls[0][2]).toEqual({});
+    expect(mockCartModel.deleteOne).toHaveBeenCalledTimes(1);
   });
 });

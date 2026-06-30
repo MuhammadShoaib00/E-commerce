@@ -32,13 +32,14 @@ describe('OrdersService', () => {
   const mockOrderModel = { create: jest.fn() };
   const mockCartModel = { findOne: jest.fn(), deleteOne: jest.fn() };
   const mockProductModel = { find: jest.fn(), updateOne: jest.fn() };
-  const mockPaymentsService = { verifyPayment: jest.fn() };
+  const mockPaymentsService = { verifyPayment: jest.fn(), refundPayment: jest.fn() };
 
   beforeEach(async () => {
     // resetAllMocks clears both call history AND queued return values
     jest.resetAllMocks();
     // Default: payment verification succeeds and returns a reference.
     mockPaymentsService.verifyPayment.mockResolvedValue('mock_ref_123');
+    mockPaymentsService.refundPayment.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -156,5 +157,24 @@ describe('OrdersService', () => {
     await service.checkout(userId, { ...dto, paymentIntentId: 'pi_test_123' });
 
     expect(mockPaymentsService.verifyPayment).toHaveBeenCalledWith('pi_test_123', 3000, userId);
+  });
+
+  it('rolls back stock and refunds the charge if order creation fails after payment', async () => {
+    const product = makeProduct(1, 'Gizmo', 1500, 10);
+    const cart = { items: [makeCartItem(1, 2)] };
+
+    mockCartModel.findOne.mockReturnValue(chainLean(cart));
+    mockProductModel.find.mockReturnValue(chainLean([product]));
+    mockProductModel.updateOne.mockResolvedValue({ matchedCount: 1 });
+    mockPaymentsService.verifyPayment.mockResolvedValue('pi_live_1');
+    mockOrderModel.create.mockRejectedValueOnce(new Error('db down'));
+
+    await expect(service.checkout(userId, dto)).rejects.toThrow('db down');
+
+    // 1 decrement + 1 rollback
+    expect(mockProductModel.updateOne).toHaveBeenCalledTimes(2);
+    expect(mockProductModel.updateOne.mock.calls[1][1]).toEqual({ $inc: { stockQuantity: 2 } });
+    // charge refunded
+    expect(mockPaymentsService.refundPayment).toHaveBeenCalledWith('pi_live_1');
   });
 });

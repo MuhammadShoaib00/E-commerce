@@ -77,11 +77,11 @@ export class OrdersService {
       userId,
     );
 
-    // 6. Atomic per-product stock decrement with rollback on race condition.
-    //    (If this fails after a real charge, production would refund/cancel the
-    //    PaymentIntent here — see NOTES.md; the race window is tiny as stock was
-    //    just validated above.)
+    // 6. Reserve stock (conditional atomic decrement) and create the order. If
+    //    anything fails AFTER payment, roll the stock back AND refund the charge,
+    //    so we never keep money for an order that wasn't created.
     const decremented: Array<{ id: string; qty: number }> = [];
+    let order: OrderDocument;
     try {
       for (const item of cart.items) {
         const product = productMap.get(item.productId.toString())!;
@@ -96,8 +96,21 @@ export class OrdersService {
         }
         decremented.push({ id: product._id.toString(), qty: item.quantity });
       }
+
+      order = await this.orderModel.create({
+        userId: new Types.ObjectId(userId),
+        items: orderItems,
+        totalAmount,
+        status: OrderStatus.PENDING,
+        paymentRef,
+        shippingAddress: {
+          street: dto.street,
+          city: dto.city,
+          country: dto.country,
+        },
+      });
     } catch (err) {
-      // Rollback all successfully decremented items
+      // Roll back any stock we decremented.
       if (decremented.length > 0) {
         await Promise.all(
           decremented.map(({ id, qty }) =>
@@ -108,25 +121,15 @@ export class OrdersService {
           ),
         );
       }
+      // Refund the charge (no-op in mock mode) so money isn't kept without an order.
+      await this.paymentsService.refundPayment(paymentRef);
       throw err;
     }
 
-    // 7. Create order after payment succeeded and stock is reserved
-    const order = await this.orderModel.create({
-      userId: new Types.ObjectId(userId),
-      items: orderItems,
-      totalAmount,
-      status: OrderStatus.PENDING,
-      paymentRef,
-      shippingAddress: {
-        street: dto.street,
-        city: dto.city,
-        country: dto.country,
-      },
-    });
-
-    // 9. Clear cart only after order is persisted
-    await this.cartModel.deleteOne({ userId: new Types.ObjectId(userId) });
+    // 7. Clear the cart — best-effort, so a failed delete can't undo a valid order.
+    await this.cartModel
+      .deleteOne({ userId: new Types.ObjectId(userId) })
+      .catch(() => undefined);
 
     return order;
   }

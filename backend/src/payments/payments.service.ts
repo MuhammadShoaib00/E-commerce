@@ -89,4 +89,22 @@ export class PaymentsService {
     }
     return intent.id;
   }
+
+  /**
+   * Best-effort refund of a charge — used when order creation fails *after* a
+   * successful payment, so we never keep money for an order that wasn't created.
+   * No-op in mock mode; never throws (failures are logged for manual follow-up).
+   */
+  async refundPayment(paymentRef: string): Promise<void> {
+    if (!this.stripe || !paymentRef || paymentRef.startsWith('mock_')) return;
+    try {
+      await this.stripe.refunds.create({ payment_intent: paymentRef });
+      this.logger.warn(`Refunded ${paymentRef} after a post-payment checkout failure`);
+    } catch (e) {
+      this.logger.error(
+        `CRITICAL: failed to refund ${paymentRef} — needs manual refund`,
+        e instanceof Error ? e.stack : String(e),
+      );
+    }
+  }
 }

@@ -29,19 +29,15 @@ async function bootstrap() {
 
   const allowedOrigin = process.env.FRONTEND_URL ?? 'http://localhost:3000';
   app.enableCors({
-    // Allow the configured frontend plus any localhost / 127.0.0.1 / LAN-IP
-    // origin (any port), so the app works whether it's opened via localhost,
-    // 127.0.0.1, or the network IP Next.js prints in dev.
+    // Allow only the configured frontend origin, plus localhost/127.0.0.1 (any
+    // port) for local dev. Arbitrary LAN IPs are NOT allowed. Never '*' with
+    // credentials.
     origin: (origin, callback) => {
-      if (
+      const allowed =
         !origin ||
         origin === allowedOrigin ||
-        /^https?:\/\/(localhost|127\.0\.0\.1|\d+\.\d+\.\d+\.\d+)(:\d+)?$/.test(origin)
-      ) {
-        callback(null, true);
-      } else {
-        callback(null, false);
-      }
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+      callback(null, allowed);
     },
     credentials: true,
   });

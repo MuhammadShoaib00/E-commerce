@@ -1,13 +1,15 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsMongoId, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class ProductQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
 
+  // Must be a valid ObjectId — otherwise new Types.ObjectId(category) throws a
+  // BSONError and surfaces as a 500. @IsMongoId rejects bad input with 400.
   @IsOptional()
-  @IsString()
+  @IsMongoId()
   category?: string;
 
   @IsOptional()

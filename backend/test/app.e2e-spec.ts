@@ -2,9 +2,10 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
 import { MongoMemoryServer } from 'mongodb-memory-server';
-import { getConnectionToken } from '@nestjs/mongoose';
-import { Connection } from 'mongoose';
+import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
+import { Connection, Model, Types } from 'mongoose';
 import { AppModule } from '../src/app.module';
+import { Order } from '../src/orders/schemas/order.schema';
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 
@@ -99,6 +100,51 @@ describe('Auth & Products (e2e)', () => {
       expect(res.body.data).toHaveProperty('items');
       expect(Array.isArray(res.body.data.items)).toBe(true);
       expect(res.body.data).toHaveProperty('total');
+    });
+
+    it('returns 400 (not 500) for a malformed category id', () =>
+      request(app.getHttpServer())
+        .get('/api/products?category=not-a-valid-id')
+        .expect(400));
+  });
+
+  describe('Order ownership', () => {
+    it("does not let one customer read another customer's order", async () => {
+      // User A (e2e@test.com) is already signed up. Find their id.
+      const meA = await request(app.getHttpServer())
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+      const userAId = meA.body.data._id;
+
+      // Seed an order owned by A directly via the model.
+      const orderModel = app.get<Model<Order>>(getModelToken(Order.name));
+      const order = await orderModel.create({
+        userId: new Types.ObjectId(userAId),
+        items: [{ productId: new Types.ObjectId(), name: 'Widget', price: 1000, quantity: 1 }],
+        totalAmount: 1000,
+        status: 'pending',
+        paymentRef: 'mock_e2e',
+        shippingAddress: {},
+      });
+
+      // User B signs up and must NOT be able to read A's order.
+      const signupB = await request(app.getHttpServer())
+        .post('/api/auth/signup')
+        .send({ name: 'User B', email: 'userb@test.com', password: 'Password123' })
+        .expect(201);
+      const tokenB = signupB.body.data.accessToken;
+
+      await request(app.getHttpServer())
+        .get(`/api/orders/${order._id}`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .expect(404);
+
+      // Owner A can read it.
+      await request(app.getHttpServer())
+        .get(`/api/orders/${order._id}`)
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
     });
   });
 

@@ -51,7 +51,8 @@ Open **http://localhost:3000**.
 **frontend/.env.local**
 | Key | Example | Notes |
 |-----|---------|-------|
-| `NEXT_PUBLIC_API_URL` | `http://localhost:4001/api` | Backend API base |
+| `NEXT_PUBLIC_API_URL` | `/api` | Same-origin; Next rewrites `/api` → backend (keeps the auth cookie same-site) |
+| `BACKEND_ORIGIN` | `http://localhost:4001` | Where the rewrite proxy forwards `/api` |
 | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_test_...` | Optional — pair with `STRIPE_SECRET_KEY`; blank = mock |
 
 ## Seeded accounts (after `npm run seed`)

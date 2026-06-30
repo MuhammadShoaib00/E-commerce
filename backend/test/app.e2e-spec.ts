@@ -1,23 +1,26 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import { getConnectionToken, getModelToken } from '@nestjs/mongoose';
 import { Connection, Model, Types } from 'mongoose';
 import { AppModule } from '../src/app.module';
 import { Order } from '../src/orders/schemas/order.schema';
+import { Cart } from '../src/cart/schemas/cart.schema';
+import { Product } from '../src/products/schemas/product.schema';
 import { TransformInterceptor } from '../src/common/interceptors/transform.interceptor';
 import { HttpExceptionFilter } from '../src/common/filters/http-exception.filter';
 
 describe('Auth & Products (e2e)', () => {
   let app: INestApplication;
-  let mongod: MongoMemoryServer;
+  let mongod: MongoMemoryReplSet;
   let accessToken: string;
 
   beforeAll(async () => {
-    mongod = await MongoMemoryServer.create();
+    mongod = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
     process.env.MONGO_URI = mongod.getUri();
     process.env.JWT_SECRET = 'e2e-test-secret-key-0123456789';
+    delete process.env.STRIPE_SECRET_KEY;
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -25,7 +28,9 @@ describe('Auth & Products (e2e)', () => {
 
     app = moduleFixture.createNestApplication();
     app.setGlobalPrefix('api');
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     app.useGlobalInterceptors(new TransformInterceptor());
     app.useGlobalFilters(new HttpExceptionFilter());
     await app.init();
@@ -42,7 +47,11 @@ describe('Auth & Products (e2e)', () => {
     it('creates a customer and returns accessToken + user', async () => {
       const res = await request(app.getHttpServer())
         .post('/api/auth/signup')
-        .send({ name: 'E2E User', email: 'e2e@test.com', password: 'Password123' })
+        .send({
+          name: 'E2E User',
+          email: 'e2e@test.com',
+          password: 'Password123',
+        })
         .expect(201);
 
       expect(res.body.data).toHaveProperty('accessToken');
@@ -121,7 +130,14 @@ describe('Auth & Products (e2e)', () => {
       const orderModel = app.get<Model<Order>>(getModelToken(Order.name));
       const order = await orderModel.create({
         userId: new Types.ObjectId(userAId),
-        items: [{ productId: new Types.ObjectId(), name: 'Widget', price: 1000, quantity: 1 }],
+        items: [
+          {
+            productId: new Types.ObjectId(),
+            name: 'Widget',
+            price: 1000,
+            quantity: 1,
+          },
+        ],
         totalAmount: 1000,
         status: 'pending',
         paymentRef: 'mock_e2e',
@@ -131,7 +147,11 @@ describe('Auth & Products (e2e)', () => {
       // User B signs up and must NOT be able to read A's order.
       const signupB = await request(app.getHttpServer())
         .post('/api/auth/signup')
-        .send({ name: 'User B', email: 'userb@test.com', password: 'Password123' })
+        .send({
+          name: 'User B',
+          email: 'userb@test.com',
+          password: 'Password123',
+        })
         .expect(201);
       const tokenB = signupB.body.data.accessToken;
 
@@ -145,6 +165,52 @@ describe('Auth & Products (e2e)', () => {
         .get(`/api/orders/${order._id}`)
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
+    });
+  });
+
+  describe('POST /api/orders/checkout', () => {
+    it('creates the order, decrements stock, and clears the cart in a Mongo transaction', async () => {
+      const meA = await request(app.getHttpServer())
+        .get('/api/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+      const userAId = meA.body.data._id;
+
+      const productModel = app.get<Model<Product>>(getModelToken(Product.name));
+      const cartModel = app.get<Model<Cart>>(getModelToken(Cart.name));
+      const product = await productModel.create({
+        name: 'Transactional Widget',
+        description: 'E2E transaction product',
+        price: 1500,
+        imageUrl: 'https://example.com/widget.png',
+        stockQuantity: 5,
+      });
+      await cartModel.create({
+        userId: new Types.ObjectId(userAId),
+        items: [{ productId: product._id, quantity: 2 }],
+      });
+
+      const res = await request(app.getHttpServer())
+        .post('/api/orders/checkout')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .send({ street: '1 Test St', city: 'London', country: 'UK' })
+        .expect(201);
+
+      expect(res.body.data.totalAmount).toBe(3000);
+      expect(res.body.data.status).toBe('pending');
+      expect(res.body.data.paymentRef).toMatch(/^mock_/);
+
+      const updatedProduct = await productModel
+        .findById(product._id)
+        .lean()
+        .exec();
+      expect(updatedProduct?.stockQuantity).toBe(3);
+      await expect(
+        cartModel
+          .findOne({ userId: new Types.ObjectId(userAId) })
+          .lean()
+          .exec(),
+      ).resolves.toBeNull();
     });
   });
 

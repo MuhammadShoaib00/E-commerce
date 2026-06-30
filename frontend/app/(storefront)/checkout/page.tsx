@@ -100,7 +100,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
-      <h1 className="mb-6 text-2xl font-bold text-neutral-900">Checkout</h1>
+      <h1 className="mb-6 text-3xl font-semibold text-neutral-900">Checkout</h1>
 
       <div className="flex flex-col items-start gap-6 lg:flex-row">
         <div className="flex flex-1 flex-col gap-6">

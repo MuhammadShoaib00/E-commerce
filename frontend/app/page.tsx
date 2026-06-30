@@ -41,9 +41,9 @@ export default function HomePage() {
   return (
     <>
       <Navbar />
-      <main className="flex-1 bg-[#f7f7f8] text-[#0d0d0f]">
-        <section className="relative isolate overflow-hidden bg-[#050505] text-white">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_38%,rgba(0,119,255,0.28),transparent_32%),linear-gradient(110deg,#050505_0%,#0b0b0b_54%,#111_100%)]" />
+      <main className="flex-1 bg-[var(--background)] text-neutral-900">
+        <section className="relative isolate overflow-hidden bg-[#0c0a07] text-white">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_72%_38%,rgba(0,119,255,0.26),transparent_34%),radial-gradient(circle_at_18%_85%,rgba(184,134,47,0.18),transparent_40%),linear-gradient(110deg,#0c0a07_0%,#11100c_54%,#171410_100%)]" />
           <div className="relative mx-auto grid min-h-[610px] max-w-7xl grid-cols-1 items-center gap-10 px-5 pb-24 pt-16 sm:px-8 lg:grid-cols-[0.92fr_1.08fr] lg:px-12 lg:pb-28">
             <div className="shopflow-fade-up z-10 max-w-xl">
               <p className="mb-5 text-sm font-semibold uppercase tracking-[0.24em] text-primary-500">

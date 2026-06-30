@@ -53,7 +53,7 @@ export default function CartPage() {
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-2xl font-bold text-neutral-900 mb-6">Your Cart</h1>
+      <h1 className="text-3xl font-semibold text-neutral-900 mb-6">Your Cart</h1>
 
       <div className="flex flex-col lg:flex-row gap-6 items-start">
         {/* Items */}

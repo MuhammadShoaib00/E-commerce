@@ -70,26 +70,28 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
         <ArrowLeft className="w-4 h-4" /> Back to products
       </Link>
 
-      <div className="bg-white rounded-2xl border border-neutral-200 overflow-hidden">
+      <div className="bg-white rounded-[var(--radius-2xl)] border border-neutral-200/70 overflow-hidden shadow-[var(--shadow-card)]">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-0">
           {/* Media: image + interactive 3D preview */}
           <ProductMedia imageUrl={product.imageUrl} name={product.name} />
 
           {/* Details */}
-          <div className="p-8 flex flex-col gap-5">
+          <div className="p-8 lg:p-10 flex flex-col gap-5">
             {product.category && (
-              <Badge variant="neutral">{product.category.name}</Badge>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-400">
+                {product.category.name}
+              </span>
             )}
 
             <div>
-              <h1 className="text-2xl font-bold text-neutral-900 leading-snug">{product.name}</h1>
-              <p className="text-3xl font-extrabold text-neutral-900 mt-3">
+              <h1 className="text-3xl lg:text-4xl font-semibold text-neutral-900 leading-tight">{product.name}</h1>
+              <p className="font-display text-3xl font-semibold text-neutral-900 mt-4">
                 {formatCurrency(product.price)}
               </p>
             </div>
 
             {product.description && (
-              <p className="text-neutral-600 text-sm leading-relaxed">{product.description}</p>
+              <p className="text-neutral-600 text-[15px] leading-relaxed">{product.description}</p>
             )}
 
             {/* Stock */}

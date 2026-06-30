@@ -40,46 +40,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await queryClient.invalidateQueries({ queryKey: ['cart'] });
   }, [queryClient]);
 
-  // Restore session from stored token on mount
+  // Restore session on mount via the httpOnly cookie (sent automatically).
+  // No token is read from JS — /auth/me succeeds only if the cookie is valid.
   useEffect(() => {
-    const token = localStorage.getItem('access_token');
-    if (!token) {
-      setIsLoading(false);
-      return;
-    }
     authApi
       .me()
       .then(setUser)
-      .catch(() => {
-        localStorage.removeItem('access_token');
-        document.cookie = 'access_token=; Max-Age=0; path=/';
-      })
+      .catch(() => setUser(null))
       .finally(() => setIsLoading(false));
   }, []);
 
-  const storeToken = (token: string) => {
-    localStorage.setItem('access_token', token);
-    // Also set as cookie so Next.js middleware can read it
-    document.cookie = `access_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}`;
-  };
-
   const login = useCallback(async (email: string, password: string) => {
-    const res = await authApi.login({ email, password });
-    storeToken(res.accessToken);
+    const res = await authApi.login({ email, password }); // sets httpOnly cookie
     await mergeGuestCart();
     setUser(res.user);
   }, [mergeGuestCart]);
 
   const signup = useCallback(async (email: string, name: string, password: string) => {
-    const res = await authApi.signup({ email, name, password });
-    storeToken(res.accessToken);
+    const res = await authApi.signup({ email, name, password }); // sets httpOnly cookie
     await mergeGuestCart();
     setUser(res.user);
   }, [mergeGuestCart]);
 
-  const logout = useCallback(() => {
-    localStorage.removeItem('access_token');
-    document.cookie = 'access_token=; Max-Age=0; path=/';
+  const logout = useCallback(async () => {
+    try {
+      await authApi.logout(); // clears the httpOnly cookie server-side
+    } catch {
+      /* ignore */
+    }
     setUser(null);
     window.location.href = '/';
   }, []);

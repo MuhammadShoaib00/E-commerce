@@ -10,4 +10,7 @@ export const authApi = {
 
   me: () =>
     apiClient.get<User>('/auth/me') as unknown as Promise<User>,
+
+  logout: () =>
+    apiClient.post('/auth/logout') as unknown as Promise<{ success: boolean }>,
 };

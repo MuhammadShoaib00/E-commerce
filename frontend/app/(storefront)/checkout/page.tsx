@@ -66,6 +66,8 @@ export default function CheckoutPage() {
       queryClient.removeQueries({ queryKey: ['cart'] });
       queryClient.removeQueries({ queryKey: ['payment-intent'] });
       queryClient.invalidateQueries({ queryKey: ['orders'] });
+      // Payment succeeded — notify, then route to the confirmation page.
+      toast(`Payment successful — order #${order._id.slice(-8).toUpperCase()} placed!`, 'success');
       router.push(`/orders/${order._id}?success=1`);
     },
     onError: (err: Error) => toast(err.message, 'error'),
